@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  pronunciation-assistant:
+    build: .
+    container_name: pronunciation-assistant
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      # Uazapi
+      - UAZAPI_BASE_URL=${UAZAPI_BASE_URL}
+      - UAZAPI_TOKEN=${UAZAPI_TOKEN}
+      
+      # Azure Speech
+      - AZURE_SPEECH_KEY=${AZURE_SPEECH_KEY}
+      - AZURE_SPEECH_REGION=${AZURE_SPEECH_REGION:-eastus}
+      
+      # OpenAI
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      
+      # Opcional: ElevenLabs
+      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY:-}
+      - ELEVENLABS_VOICE_ID=${ELEVENLABS_VOICE_ID:-21m00Tcm4TlvDq8ikWAM}
+      
+      # Server
+      - HOST=0.0.0.0
+      - PORT=8000
+      - DEBUG=${DEBUG:-false}
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
