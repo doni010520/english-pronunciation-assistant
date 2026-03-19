@@ -14,6 +14,10 @@ class Settings(BaseSettings):
     # OpenAI
     openai_api_key: str
     
+    # Supabase
+    supabase_url: str
+    supabase_key: str
+
     # ElevenLabs (opcional)
     elevenlabs_api_key: str = ""
     elevenlabs_voice_id: str = "21m00Tcm4TlvDq8ikWAM"

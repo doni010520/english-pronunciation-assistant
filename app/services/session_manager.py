@@ -1,10 +1,15 @@
+import logging
 from typing import Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+
 from app.models import PracticeSession
 
 
+logger = logging.getLogger(__name__)
+
+
 # ============================================
-# FRASES PARA PRÁTICA POR NÍVEL E FOCO
+# FRASES PARA PRATICA POR NIVEL E FOCO
 # ============================================
 
 PRACTICE_PHRASES = {
@@ -65,53 +70,117 @@ PRACTICE_PHRASES = {
 
 class SessionManager:
     """
-    Gerenciador de sessões de prática em memória
-    Em produção, usar Redis ou Supabase
+    Gerenciador de sessoes de pratica com Supabase
     """
-    
-    def __init__(self):
-        # phone -> PracticeSession
-        self._sessions: dict[str, PracticeSession] = {}
-        self._phrase_index: dict[str, int] = {}  # phone -> índice da próxima frase
+
+    def __init__(self, supabase_client):
+        self._client = supabase_client
         self._session_timeout = timedelta(minutes=30)
-    
-    def get_session(self, phone: str) -> Optional[PracticeSession]:
-        """Obtém sessão ativa do usuário"""
-        session = self._sessions.get(phone)
-        return session
-    
-    def create_session(
-        self, 
-        phone: str, 
+
+    async def get_session(self, phone: str) -> Optional[PracticeSession]:
+        """Obtem sessao ativa do usuario"""
+        result = await (
+            self._client.table("users")
+            .select("*")
+            .eq("phone", phone)
+            .maybe_single()
+            .execute()
+        )
+
+        if not result.data or result.data.get("reference_text") is None:
+            return None
+
+        row = result.data
+
+        # Verificar timeout
+        updated_at = datetime.fromisoformat(row["updated_at"])
+        if datetime.now(timezone.utc) - updated_at > self._session_timeout:
+            await self.clear_session(phone)
+            return None
+
+        return PracticeSession(
+            phone=row["phone"],
+            reference_text=row["reference_text"],
+            attempt_number=row["attempt_number"],
+            previous_scores=row["previous_scores"] or [],
+            level=row["level"],
+            focus=row["focus"],
+            updated_at=updated_at,
+        )
+
+    async def create_session(
+        self,
+        phone: str,
         reference_text: str,
-        level: str = "intermediate"
+        level: str = "intermediate",
     ) -> PracticeSession:
-        """Cria ou atualiza sessão de prática"""
-        session = PracticeSession(
+        """Cria ou atualiza sessao de pratica"""
+        data = {
+            "phone": phone,
+            "reference_text": reference_text,
+            "attempt_number": 1,
+            "previous_scores": [],
+            "level": level,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+        await (
+            self._client.table("users")
+            .upsert(data, on_conflict="phone")
+            .execute()
+        )
+
+        return PracticeSession(
             phone=phone,
             reference_text=reference_text,
             attempt_number=1,
-            previous_scores=[]
+            previous_scores=[],
+            level=level,
         )
-        self._sessions[phone] = session
+
+    async def update_session(self, phone: str, score: float) -> Optional[PracticeSession]:
+        """Atualiza sessao com novo score e grava historico"""
+        session = await self.get_session(phone)
+        if not session:
+            return None
+
+        new_scores = session.previous_scores + [score]
+        new_attempt = session.attempt_number + 1
+
+        await (
+            self._client.table("users")
+            .update({
+                "previous_scores": new_scores,
+                "attempt_number": new_attempt,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            })
+            .eq("phone", phone)
+            .execute()
+        )
+
+        # Gravar no historico
+        await (
+            self._client.table("session_history")
+            .insert({
+                "phone": phone,
+                "reference_text": session.reference_text,
+                "score": score,
+                "attempt_number": session.attempt_number,
+            })
+            .execute()
+        )
+
+        session.previous_scores = new_scores
+        session.attempt_number = new_attempt
         return session
-    
-    def update_session(self, phone: str, score: float) -> PracticeSession:
-        """Atualiza sessão com novo score"""
-        session = self._sessions.get(phone)
-        if session:
-            session.previous_scores.append(score)
-            session.attempt_number += 1
-            return session
-        return None
-    
-    def get_next_phrase(
-        self, 
-        phone: str, 
+
+    async def get_next_phrase(
+        self,
+        phone: str,
         focus: str = "general",
-        level: str = "intermediate"
+        level: str = "intermediate",
     ) -> str:
-        """Obtém próxima frase para praticar"""
+        """Obtem proxima frase para praticar"""
         # Determinar lista de frases
         if focus in PRACTICE_PHRASES:
             phrases = PRACTICE_PHRASES[focus]
@@ -119,35 +188,107 @@ class SessionManager:
             phrases = PRACTICE_PHRASES[level]
         else:
             phrases = PRACTICE_PHRASES["general"]
-        
-        # Pegar índice atual e avançar
-        key = f"{phone}_{focus}"
-        index = self._phrase_index.get(key, 0)
+
+        # Buscar indice atual do usuario
+        result = await (
+            self._client.table("users")
+            .select("phrase_focus, phrase_index")
+            .eq("phone", phone)
+            .maybe_single()
+            .execute()
+        )
+
+        index = 0
+        if result.data:
+            # Se mudou o foco, resetar indice
+            if result.data.get("phrase_focus") == focus:
+                index = result.data.get("phrase_index", 0)
+
         phrase = phrases[index % len(phrases)]
-        self._phrase_index[key] = (index + 1) % len(phrases)
-        
+        next_index = (index + 1) % len(phrases)
+
+        # Upsert para salvar indice e garantir que o usuario existe
+        await (
+            self._client.table("users")
+            .upsert(
+                {
+                    "phone": phone,
+                    "phrase_focus": focus,
+                    "phrase_index": next_index,
+                    "level": level,
+                    "focus": focus,
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                },
+                on_conflict="phone",
+            )
+            .execute()
+        )
+
         return phrase
-    
-    def clear_session(self, phone: str):
-        """Limpa sessão do usuário"""
-        if phone in self._sessions:
-            del self._sessions[phone]
-    
-    def get_user_progress(self, phone: str) -> dict:
-        """Retorna progresso do usuário na sessão atual"""
-        session = self._sessions.get(phone)
-        if not session or not session.previous_scores:
-            return {"attempts": 0, "average": 0, "best": 0, "trend": "neutral"}
-        
-        scores = session.previous_scores
-        return {
-            "attempts": len(scores),
-            "average": sum(scores) / len(scores),
-            "best": max(scores),
-            "latest": scores[-1],
-            "trend": "improving" if len(scores) > 1 and scores[-1] > scores[-2] else "neutral"
-        }
+
+    async def clear_session(self, phone: str):
+        """Limpa sessao ativa do usuario"""
+        await (
+            self._client.table("users")
+            .update({
+                "reference_text": None,
+                "previous_scores": [],
+                "attempt_number": 0,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            })
+            .eq("phone", phone)
+            .execute()
+        )
+
+    async def get_user_progress(self, phone: str) -> dict:
+        """Retorna progresso do usuario (sessao atual + historico)"""
+        session = await self.get_session(phone)
+
+        progress = {"attempts": 0, "average": 0, "best": 0, "trend": "neutral"}
+
+        if session and session.previous_scores:
+            scores = session.previous_scores
+            progress.update({
+                "attempts": len(scores),
+                "average": sum(scores) / len(scores),
+                "best": max(scores),
+                "latest": scores[-1],
+                "trend": "improving" if len(scores) > 1 and scores[-1] > scores[-2] else "neutral",
+            })
+
+        # Stats de longo prazo
+        result = await (
+            self._client.rpc(
+                "get_user_lifetime_stats",
+                {"user_phone": phone},
+            )
+            .execute()
+        )
+
+        if result.data and len(result.data) > 0:
+            stats = result.data[0]
+            progress["lifetime_attempts"] = stats.get("total", 0)
+            progress["lifetime_average"] = stats.get("avg_score", 0)
+            progress["lifetime_best"] = stats.get("best_score", 0)
+
+        return progress
+
+    async def update_user_preferences(
+        self, phone: str, level: str = None, focus: str = None
+    ):
+        """Atualiza preferencias do usuario"""
+        data = {"updated_at": datetime.now(timezone.utc).isoformat()}
+        if level:
+            data["level"] = level
+        if focus:
+            data["focus"] = focus
+
+        await (
+            self._client.table("users")
+            .upsert({"phone": phone, **data}, on_conflict="phone")
+            .execute()
+        )
 
 
-# Instância global (em produção, usar injeção de dependência)
-session_manager = SessionManager()
+# Inicializado no lifespan do FastAPI
+session_manager: Optional[SessionManager] = None

@@ -16,6 +16,9 @@ pydub==0.25.1
 # Environment
 python-dotenv==1.0.1
 
+# Supabase
+supabase==2.13.0
+
 # Utilities
 pydantic==2.9.0
 pydantic-settings==2.5.0

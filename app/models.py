@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 from typing import Optional, Any
+from datetime import datetime
 
 
 # ============================================
@@ -100,3 +101,6 @@ class PracticeSession(BaseModel):
     reference_text: str
     attempt_number: int = 1
     previous_scores: list[float] = []
+    level: str = "intermediate"
+    focus: str = "general"
+    updated_at: Optional[datetime] = None

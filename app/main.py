@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.responses import JSONResponse
+from supabase import acreate_client
 
 from app.config import get_settings
 from app.models import UazapiWebhook
@@ -12,8 +13,9 @@ from app.services import (
     BrazilianErrorAnalyzer,
     FeedbackGenerator,
     extract_phone_from_jid,
-    session_manager,
+    SessionManager,
 )
+import app.services.session_manager as sm
 
 
 # ============================================
@@ -41,19 +43,25 @@ feedback_generator: FeedbackGenerator = None
 async def lifespan(app: FastAPI):
     """Inicializa serviços no startup"""
     global uazapi_service, azure_service, error_analyzer, feedback_generator
-    
-    logger.info("🚀 Inicializando serviços...")
-    
+
+    logger.info("Inicializando servicos...")
+
+    settings = get_settings()
+
+    # Supabase
+    supabase_client = await acreate_client(settings.supabase_url, settings.supabase_key)
+    sm.session_manager = SessionManager(supabase_client)
+
     uazapi_service = UazapiService()
     azure_service = AzureSpeechService()
     error_analyzer = BrazilianErrorAnalyzer()
     feedback_generator = FeedbackGenerator()
-    
-    logger.info("✅ Serviços inicializados!")
-    
+
+    logger.info("Servicos inicializados!")
+
     yield
-    
-    logger.info("👋 Encerrando aplicação...")
+
+    logger.info("Encerrando aplicacao...")
 
 
 # ============================================
@@ -118,10 +126,10 @@ async def process_text_message(phone: str, text: str, message_id: str):
         focus = parts[1] if len(parts) > 1 else "general"
         
         # Gerar frase
-        phrase = session_manager.get_next_phrase(phone, focus=focus)
-        
+        phrase = await sm.session_manager.get_next_phrase(phone, focus=focus)
+
         # Criar sessão
-        session_manager.create_session(phone, phrase)
+        await sm.session_manager.create_session(phone, phrase)
         
         message = f"""📝 *Frase para praticar:*
 
@@ -135,33 +143,35 @@ _Dica: Fale devagar e claramente na primeira tentativa._"""
         return
     
     if text == "/progress":
-        progress = session_manager.get_user_progress(phone)
+        progress = await sm.session_manager.get_user_progress(phone)
         
-        if progress["attempts"] == 0:
+        if progress["attempts"] == 0 and not progress.get("lifetime_attempts"):
             await uazapi_service.send_text(
-                phone, 
-                "📊 Você ainda não tem progresso nesta sessão.\n\nEnvie /phrase para começar!"
+                phone,
+                "Voce ainda nao tem progresso.\n\nEnvie /phrase para comecar!"
             )
         else:
-            trend_emoji = "📈" if progress["trend"] == "improving" else "➡️"
-            message = f"""📊 *Seu Progresso*
+            parts = []
+            if progress["attempts"] > 0:
+                trend_emoji = "+" if progress["trend"] == "improving" else "="
+                parts.append(f"*Sessao Atual*\nTentativas: {progress['attempts']}\nMedia: {progress['average']:.0f}/100\nMelhor: {progress['best']:.0f}/100\nUltimo: {progress['latest']:.0f}/100 {trend_emoji}")
 
-🎯 Tentativas: {progress['attempts']}
-📊 Média: {progress['average']:.0f}/100
-🏆 Melhor: {progress['best']:.0f}/100
-{trend_emoji} Último: {progress['latest']:.0f}/100
+            lifetime = progress.get("lifetime_attempts", 0)
+            if lifetime > 0:
+                parts.append(f"*Historico Geral*\nTotal de tentativas: {lifetime}\nMedia geral: {progress['lifetime_average']:.0f}/100\nMelhor nota: {progress['lifetime_best']:.0f}/100")
 
-Continue praticando! Envie /phrase para nova frase."""
-            
+            parts.append("Continue praticando! Envie /phrase para nova frase.")
+            message = "\n\n".join(parts)
             await uazapi_service.send_text(phone, message)
         return
     
     if text.startswith("/level"):
         parts = text.split()
         if len(parts) > 1 and parts[1] in ["beginner", "intermediate", "advanced"]:
+            await sm.session_manager.update_user_preferences(phone, level=parts[1])
             await uazapi_service.send_text(
                 phone,
-                f"✅ Nível definido para: *{parts[1]}*\n\nEnvie /phrase para praticar!"
+                f"Nivel definido para: *{parts[1]}*\n\nEnvie /phrase para praticar!"
             )
         else:
             await uazapi_service.send_text(
@@ -169,23 +179,24 @@ Continue praticando! Envie /phrase para nova frase."""
                 "Uso: /level beginner|intermediate|advanced"
             )
         return
-    
+
     if text.startswith("/focus"):
         parts = text.split()
         options = ["th_sounds", "vowels", "r_sound", "general"]
         if len(parts) > 1 and parts[1] in options:
+            await sm.session_manager.update_user_preferences(phone, focus=parts[1])
             await uazapi_service.send_text(
                 phone,
-                f"✅ Foco definido para: *{parts[1]}*\n\nEnvie /phrase para praticar!"
+                f"Foco definido para: *{parts[1]}*\n\nEnvie /phrase para praticar!"
             )
         else:
             await uazapi_service.send_text(
                 phone,
                 "Uso: /focus th_sounds|vowels|r_sound|general\n\n"
-                "• th_sounds - Sons de TH (think, this)\n"
-                "• vowels - Vogais problemáticas\n"
-                "• r_sound - R americano\n"
-                "• general - Frases gerais"
+                "- th_sounds - Sons de TH (think, this)\n"
+                "- vowels - Vogais problematicas\n"
+                "- r_sound - R americano\n"
+                "- general - Frases gerais"
             )
         return
     
@@ -200,7 +211,7 @@ async def process_audio_message(phone: str, message_id: str, push_name: str = No
     """Processa mensagens de áudio - o coração do sistema!"""
     
     # Verificar se tem sessão ativa
-    session = session_manager.get_session(phone)
+    session = await sm.session_manager.get_session(phone)
     
     if not session:
         await uazapi_service.send_text(
@@ -245,7 +256,7 @@ async def process_audio_message(phone: str, message_id: str, push_name: str = No
         analysis = error_analyzer.analyze(pronunciation_result)
         
         # 4. Atualizar sessão com score
-        session_manager.update_session(phone, pronunciation_result.overall_score)
+        await sm.session_manager.update_session(phone, pronunciation_result.overall_score)
         
         # 5. Gerar feedback humanizado
         feedback = await feedback_generator.generate_feedback(
