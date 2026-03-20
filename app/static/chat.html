@@ -307,12 +307,12 @@ function loadAvatar(urls, index = 0) {
       const isFullBody = size.y > 0.5; // full body models are tall
 
       if (isFullBody) {
-        // Full body: frame upper body/head area
+        // Full body: frame head + upper body
         model.position.set(-center.x, -box.min.y, -center.z);
         scene.add(model);
-        const headY = size.y * 0.85;
+        const headY = size.y * 0.75;
         controls.target.set(0, headY, 0);
-        camera.position.set(0, headY, 0.65);
+        camera.position.set(0, headY, 1.1);
       } else {
         // Face only: center and scale
         const targetHeight = 0.35;
