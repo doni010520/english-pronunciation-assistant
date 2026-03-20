@@ -10,10 +10,10 @@ from app.services.rag import RAGService
 logger = logging.getLogger(__name__)
 
 # --------------------------------------------------
-# Prompt base — sempre presente, não editável pelo admin
+# Prompt default — usado apenas se o admin não configurou nenhum prompt no painel
 # --------------------------------------------------
 
-BASE_SYSTEM_PROMPT = """You are {agent_name}, a friendly English tutor chatting with a Brazilian student on WhatsApp.
+DEFAULT_SYSTEM_PROMPT = """You are {agent_name}, a friendly English tutor chatting with a Brazilian student on WhatsApp.
 Your personality: {personality}.
 
 YOUR PRIMARY GOAL: CONVERSATION.
@@ -167,18 +167,20 @@ class ConversationalAgent:
     # --------------------------------------------------
 
     def _build_system_prompt(self, settings: dict, push_name: str, rag_context: str = None) -> str:
-        """Monta o system prompt completo: base + admin custom + RAG + student name."""
+        """Monta o system prompt: usa o prompt do painel admin, ou o default se vazio."""
         agent_name = settings.get("agent_name", "Emma")
         personality = settings.get("personality", "friendly, patient, encouraging")
 
-        # Prompt base (sempre presente)
-        prompt = BASE_SYSTEM_PROMPT.replace("{agent_name}", agent_name)
-        prompt = prompt.replace("{personality}", personality)
-
-        # Prompt customizado pelo admin (complemento, não substituto)
+        # Prompt único: vem do banco (painel admin). Se vazio, usa o default.
         admin_prompt = settings.get("system_prompt", "").strip()
         if admin_prompt:
-            prompt += f"\n\nADDITIONAL INSTRUCTIONS FROM ADMIN:\n{admin_prompt}"
+            prompt = admin_prompt
+        else:
+            prompt = DEFAULT_SYSTEM_PROMPT
+
+        # Substituir placeholders
+        prompt = prompt.replace("{agent_name}", agent_name)
+        prompt = prompt.replace("{personality}", personality)
 
         # Contexto RAG
         if rag_context:
