@@ -10,6 +10,43 @@ from app.services.rag import RAGService
 logger = logging.getLogger(__name__)
 
 # --------------------------------------------------
+# Prompt base — sempre presente, não editável pelo admin
+# --------------------------------------------------
+
+BASE_SYSTEM_PROMPT = """You are {agent_name}, a friendly English tutor chatting with a Brazilian student on WhatsApp.
+Your personality: {personality}.
+
+HOW TO BEHAVE:
+- You are a REAL conversation partner, not a bot. Chat naturally.
+- Match the student's language: if they write in Portuguese, reply in Portuguese. If in English, reply in English. If they mix, you can mix too.
+- Keep messages short — 2 to 4 lines max, like a real WhatsApp message.
+- Ask questions, react to what they say, share opinions, be fun and engaging.
+- You are a tutor AND a friend. The student should enjoy talking to you.
+
+WHEN THE STUDENT SENDS AN AUDIO FOR PRONUNCIATION PRACTICE:
+- You will receive their pronunciation score and error details.
+- Give brief, encouraging feedback. Focus on what they did well.
+- Only mention errors if something was COMPLETELY wrong (wrong word, skipped word, unintelligible).
+- NEVER correct accent, intonation, or subtle pronunciation differences. Those are normal and vary by region.
+- After feedback, keep the conversation going — suggest trying again, ask if they want a new phrase, etc.
+
+CORRECTIONS IN TEXT CONVERSATION:
+- Only correct truly gross errors: completely wrong words, broken grammar that changes meaning.
+- Do NOT correct minor spelling, accent-dependent pronunciation, or small nuances.
+- When you correct, do it implicitly by using the correct form in your reply. NEVER lecture or list errors.
+- Example: student writes "I goed to the store" → you reply "Oh you went to the store? What did you buy?" — correction is natural, conversation flows.
+
+WHAT YOU CAN DO:
+- Have free conversation in English or Portuguese
+- Give practice phrases for pronunciation
+- Show the student's progress and stats
+- Adjust difficulty level and focus area
+- Answer questions about English (grammar, vocabulary, expressions, culture)
+- Help with any English learning need the student has
+
+IMPORTANT: Always keep the conversation moving forward. Never end on just a correction or a score. Always give the student something to respond to."""
+
+# --------------------------------------------------
 # Tools (function calling) do agente
 # --------------------------------------------------
 
@@ -115,25 +152,38 @@ class ConversationalAgent:
             self._settings_cache = {
                 "agent_name": "Emma",
                 "personality": "friendly, patient, encouraging",
-                "system_prompt": (
-                    "You are {agent_name}, an English pronunciation tutor for Brazilian students. "
-                    "Personality: {personality}. Respond in Portuguese (pt-BR) by default, switching to English when the student writes in English. "
-                    "Be natural and conversational, like a real tutor chatting on WhatsApp. Keep messages short (2-4 lines).\n\n"
-                    "CORRECTION POLICY:\n"
-                    "- Only correct gross errors: completely wrong words, missing words, broken grammar that changes meaning.\n"
-                    "- Do NOT correct spelling slips, accent-dependent pronunciation, or small nuances.\n"
-                    "- When you do correct, weave it naturally into the conversation. Never stop the flow to lecture.\n"
-                    "- Example: if student writes 'I goed there', reply naturally with 'Oh you went there? Nice!' — "
-                    "the correction is implicit, the conversation continues.\n\n"
-                    "CONVERSATION FLOW:\n"
-                    "- Always keep the conversation moving forward. Never end on just a correction.\n"
-                    "- Ask questions, suggest activities, react to what the student says.\n"
-                    "- Be a tutor AND a conversation partner — make it fun and engaging."
-                ),
+                "system_prompt": "",
                 "language": "pt-BR",
             }
         self._settings_cached_at = now
         return self._settings_cache
+
+    # --------------------------------------------------
+    # Build system prompt
+    # --------------------------------------------------
+
+    def _build_system_prompt(self, settings: dict, push_name: str, rag_context: str = None) -> str:
+        """Monta o system prompt completo: base + admin custom + RAG + student name."""
+        agent_name = settings.get("agent_name", "Emma")
+        personality = settings.get("personality", "friendly, patient, encouraging")
+
+        # Prompt base (sempre presente)
+        prompt = BASE_SYSTEM_PROMPT.replace("{agent_name}", agent_name)
+        prompt = prompt.replace("{personality}", personality)
+
+        # Prompt customizado pelo admin (complemento, não substituto)
+        admin_prompt = settings.get("system_prompt", "").strip()
+        if admin_prompt:
+            prompt += f"\n\nADDITIONAL INSTRUCTIONS FROM ADMIN:\n{admin_prompt}"
+
+        # Contexto RAG
+        if rag_context:
+            prompt += f"\n\nRELEVANT KNOWLEDGE:\n{rag_context}"
+
+        # Nome do aluno
+        prompt += f"\n\nStudent name: {push_name}"
+
+        return prompt
 
     # --------------------------------------------------
     # Conversation history
@@ -212,14 +262,7 @@ class ConversationalAgent:
         rag_context = await self._rag.get_relevant_context(text)
 
         # Montar system prompt
-        system_prompt = settings.get("system_prompt", "")
-        system_prompt = system_prompt.replace("{agent_name}", settings.get("agent_name", "Emma"))
-        system_prompt = system_prompt.replace("{personality}", settings.get("personality", ""))
-
-        if rag_context:
-            system_prompt += f"\n\n{rag_context}"
-
-        system_prompt += f"\n\nStudent name: {push_name}"
+        system_prompt = self._build_system_prompt(settings, push_name, rag_context)
 
         # Montar mensagens para o GPT
         messages = [{"role": "system", "content": system_prompt}]
@@ -243,7 +286,7 @@ class ConversationalAgent:
             tool_name = tool_call.function.name
             tool_args = json.loads(tool_call.function.arguments)
 
-            logger.info(f"🔧 Tool call: {tool_name}({tool_args})")
+            logger.info(f"Tool call: {tool_name}({tool_args})")
 
             # Executar tool
             tool_result = await self._execute_tool(phone, tool_name, tool_args)
@@ -299,26 +342,17 @@ class ConversationalAgent:
             f"Attempt #{attempt_number} on this phrase.\n"
             f"Errors detected: {errors_summary}\n\n"
             f"Generate feedback in the same language the student has been using in the conversation. "
-            f"Check the conversation history — if they've been writing in English, respond in English. "
-            f"If in Portuguese, respond in Portuguese. If mixed, match their most recent language.\n"
+            f"Check the conversation history to determine the language.\n"
             f"This will be converted to speech audio, so write naturally as spoken language — "
-            f"no emojis, no markdown, no asterisks, no special characters.\n"
-            f"Start by acknowledging the effort, then give a quick tip if needed. "
-            f"Only mention truly gross errors (completely wrong/skipped words). "
-            f"Ignore small pronunciation nuances or accent variations.\n"
-            f"IMPORTANT: Keep the conversation flowing! After the feedback, naturally move forward — "
-            f"suggest trying again, offer a new phrase, or ask what they'd like to practice next.\n"
-            f"Keep it short (3-4 sentences max). Be warm, like a real tutor talking."
+            f"no emojis, no markdown, no asterisks, no special characters, no bullet points.\n"
+            f"Be warm and brief (3-4 sentences). Keep the conversation going after the feedback."
         )
 
         await self._save_message(phone, "user", f"[audio: pronunciou \"{reference_text}\"]", {"type": "audio", "score": score})
 
         history = await self._load_history(phone)
 
-        system_prompt = settings.get("system_prompt", "")
-        system_prompt = system_prompt.replace("{agent_name}", settings.get("agent_name", "Emma"))
-        system_prompt = system_prompt.replace("{personality}", settings.get("personality", ""))
-        system_prompt += f"\n\nStudent name: {push_name}"
+        system_prompt = self._build_system_prompt(settings, push_name)
 
         messages = [{"role": "system", "content": system_prompt}]
         messages.extend(history)
@@ -357,10 +391,7 @@ class ConversationalAgent:
 
         history = await self._load_history(phone)
 
-        system_prompt = settings.get("system_prompt", "")
-        system_prompt = system_prompt.replace("{agent_name}", settings.get("agent_name", "Emma"))
-        system_prompt = system_prompt.replace("{personality}", settings.get("personality", ""))
-        system_prompt += f"\n\nStudent name: {push_name}"
+        system_prompt = self._build_system_prompt(settings, push_name)
 
         messages = [{"role": "system", "content": system_prompt}]
         messages.extend(history)
