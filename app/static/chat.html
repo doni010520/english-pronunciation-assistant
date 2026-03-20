@@ -3,22 +3,20 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>English Tutor - Chat</title>
+<title>English Tutor</title>
 <style>
   :root {
-    --bg: #0f0f1a;
-    --surface: #1a1a2e;
-    --surface2: #252540;
+    --bg: #0a0a14;
+    --surface: #12122a;
+    --surface2: #1e1e3a;
     --primary: #6c63ff;
-    --primary-glow: rgba(108, 99, 255, 0.3);
-    --text: #e0e0e0;
-    --text-dim: #8888aa;
+    --primary-glow: rgba(108, 99, 255, 0.35);
+    --text: #e8e8f0;
+    --text-dim: #7777aa;
     --accent: #00d4aa;
     --danger: #ff4757;
   }
-
   * { margin: 0; padding: 0; box-sizing: border-box; }
-
   body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     background: var(--bg);
@@ -26,336 +24,433 @@
     height: 100dvh;
     display: flex;
     flex-direction: column;
-    align-items: center;
     overflow: hidden;
   }
 
-  /* === AVATAR AREA === */
-  .avatar-area {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 20px;
-    max-height: 60vh;
-  }
-
-  .avatar-container {
+  /* === 3D AVATAR === */
+  .avatar-section {
     position: relative;
-    width: 200px;
-    height: 200px;
-  }
-
-  .avatar-ring {
-    position: absolute;
-    inset: -8px;
-    border-radius: 50%;
-    border: 3px solid var(--surface2);
-    transition: border-color 0.3s, box-shadow 0.3s;
-  }
-
-  .avatar-ring.speaking {
-    border-color: var(--primary);
-    box-shadow: 0 0 30px var(--primary-glow), 0 0 60px var(--primary-glow);
-    animation: pulse-ring 1.5s ease-in-out infinite;
-  }
-
-  @keyframes pulse-ring {
-    0%, 100% { box-shadow: 0 0 20px var(--primary-glow); }
-    50% { box-shadow: 0 0 40px var(--primary-glow), 0 0 80px rgba(108,99,255,0.15); }
-  }
-
-  .avatar-face {
-    width: 200px;
-    height: 200px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, var(--surface2), var(--surface));
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    position: relative;
-    overflow: hidden;
-  }
-
-  .avatar-eyes {
-    display: flex;
-    gap: 30px;
-    margin-bottom: 20px;
-  }
-
-  .eye {
-    width: 16px;
-    height: 16px;
-    background: var(--text);
-    border-radius: 50%;
-    position: relative;
-    animation: blink 4s ease-in-out infinite;
-  }
-
-  @keyframes blink {
-    0%, 95%, 100% { transform: scaleY(1); }
-    97% { transform: scaleY(0.1); }
-  }
-
-  .mouth {
-    width: 30px;
-    height: 8px;
-    background: var(--primary);
-    border-radius: 0 0 15px 15px;
-    transition: all 0.08s ease;
-  }
-
-  .mouth.speaking {
-    animation: talk 0.15s ease-in-out infinite alternate;
-  }
-
-  @keyframes talk {
-    0% { height: 6px; width: 25px; border-radius: 0 0 12px 12px; }
-    100% { height: 18px; width: 32px; border-radius: 0 0 16px 16px; }
-  }
-
-  .avatar-name {
-    margin-top: 16px;
-    font-size: 1.2em;
-    font-weight: 600;
-    color: var(--text);
-  }
-
-  .avatar-status {
-    font-size: 0.85em;
-    color: var(--text-dim);
-    margin-top: 4px;
-    min-height: 20px;
-  }
-
-  /* === CHAT MESSAGES === */
-  .chat-area {
     width: 100%;
-    max-width: 600px;
+    height: 55vh;
+    min-height: 300px;
+    background: radial-gradient(ellipse at 50% 80%, #1a1a3e 0%, var(--bg) 70%);
+  }
+  #avatarCanvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+  .avatar-overlay {
+    position: absolute;
+    bottom: 12px;
+    left: 0; right: 0;
+    text-align: center;
+    pointer-events: none;
+  }
+  .avatar-name {
+    font-size: 1.1em;
+    font-weight: 600;
+    text-shadow: 0 2px 8px rgba(0,0,0,0.5);
+  }
+  .avatar-status {
+    font-size: 0.8em;
+    color: var(--text-dim);
+    margin-top: 2px;
+    min-height: 18px;
+  }
+  .loading-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg);
+    z-index: 10;
+    transition: opacity 0.6s;
+  }
+  .loading-overlay.hidden { opacity: 0; pointer-events: none; }
+  .spinner {
+    width: 40px; height: 40px;
+    border: 3px solid var(--surface2);
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-text { margin-top: 12px; color: var(--text-dim); font-size: 0.9em; }
+
+  /* === CHAT === */
+  .chat-area {
     flex: 1;
     overflow-y: auto;
-    padding: 0 16px 10px;
+    padding: 8px 16px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    max-height: 25vh;
+    gap: 6px;
   }
-
-  .chat-area::-webkit-scrollbar { width: 4px; }
+  .chat-area::-webkit-scrollbar { width: 3px; }
   .chat-area::-webkit-scrollbar-thumb { background: var(--surface2); border-radius: 2px; }
-
   .msg {
-    max-width: 85%;
-    padding: 10px 14px;
-    border-radius: 16px;
-    font-size: 0.9em;
+    max-width: 82%;
+    padding: 9px 13px;
+    border-radius: 14px;
+    font-size: 0.88em;
     line-height: 1.4;
-    animation: fadeIn 0.3s ease;
+    animation: fadeUp 0.25s ease;
   }
+  @keyframes fadeUp { from { opacity:0; transform:translateY(6px); } }
+  .msg.user { align-self:flex-end; background:var(--primary); color:#fff; border-bottom-right-radius:4px; }
+  .msg.assistant { align-self:flex-start; background:var(--surface2); border-bottom-left-radius:4px; }
+  .msg.system { align-self:center; background:none; color:var(--text-dim); font-size:0.78em; font-style:italic; }
 
-  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } }
-
-  .msg.user {
-    align-self: flex-end;
-    background: var(--primary);
-    color: white;
-    border-bottom-right-radius: 4px;
-  }
-
-  .msg.assistant {
-    align-self: flex-start;
-    background: var(--surface2);
-    color: var(--text);
-    border-bottom-left-radius: 4px;
-  }
-
-  .msg.system {
-    align-self: center;
-    background: transparent;
-    color: var(--text-dim);
-    font-size: 0.8em;
-    font-style: italic;
-  }
-
-  /* === INPUT AREA === */
+  /* === INPUT === */
   .input-area {
-    width: 100%;
-    max-width: 600px;
-    padding: 12px 16px 24px;
+    padding: 10px 14px 22px;
     display: flex;
-    gap: 10px;
+    gap: 8px;
     align-items: center;
     background: var(--surface);
     border-top: 1px solid var(--surface2);
   }
-
   .text-input {
-    flex: 1;
-    padding: 12px 16px;
-    border-radius: 24px;
-    border: 1px solid var(--surface2);
-    background: var(--bg);
-    color: var(--text);
-    font-size: 0.95em;
-    outline: none;
+    flex:1; padding:11px 16px; border-radius:22px;
+    border:1px solid var(--surface2); background:var(--bg);
+    color:var(--text); font-size:0.92em; outline:none;
     transition: border-color 0.2s;
   }
-
   .text-input:focus { border-color: var(--primary); }
-
-  .btn-mic {
-    width: 48px;
-    height: 48px;
-    border-radius: 50%;
-    border: none;
-    background: var(--primary);
-    color: white;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.2s;
-    flex-shrink: 0;
+  .btn {
+    width:46px; height:46px; border-radius:50%; border:none;
+    cursor:pointer; display:flex; align-items:center; justify-content:center;
+    transition: all 0.15s; flex-shrink:0;
   }
-
-  .btn-mic:hover { transform: scale(1.05); }
-
-  .btn-mic.recording {
-    background: var(--danger);
-    animation: pulse-rec 1s ease-in-out infinite;
-  }
-
+  .btn:active { transform: scale(0.93); }
+  .btn svg { width:20px; height:20px; }
+  .btn-mic { background:var(--primary); color:#fff; }
+  .btn-mic.recording { background:var(--danger); animation: pulse-rec 1s ease-in-out infinite; }
   @keyframes pulse-rec {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(255,71,87,0.4); }
-    50% { box-shadow: 0 0 0 12px rgba(255,71,87,0); }
+    0%,100% { box-shadow:0 0 0 0 rgba(255,71,87,0.4); }
+    50% { box-shadow:0 0 0 10px rgba(255,71,87,0); }
   }
-
-  .btn-mic svg { width: 22px; height: 22px; }
-
-  .btn-send {
-    width: 48px;
-    height: 48px;
-    border-radius: 50%;
-    border: none;
-    background: var(--accent);
-    color: var(--bg);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.2s;
-    flex-shrink: 0;
-  }
-
-  .btn-send:hover { transform: scale(1.05); }
-  .btn-send:disabled { opacity: 0.4; cursor: default; transform: none; }
-  .btn-send svg { width: 20px; height: 20px; }
-
-  /* === WAVE VISUALIZER === */
-  .wave-bar {
-    display: flex;
-    gap: 3px;
-    align-items: center;
-    height: 30px;
-    margin-top: 8px;
-    opacity: 0;
-    transition: opacity 0.3s;
-  }
-
-  .wave-bar.active { opacity: 1; }
-
-  .wave-bar span {
-    width: 4px;
-    background: var(--primary);
-    border-radius: 2px;
-    transition: height 0.1s ease;
-    height: 4px;
-  }
-
-  /* Responsive */
-  @media (max-width: 480px) {
-    .avatar-container { width: 150px; height: 150px; }
-    .avatar-face { width: 150px; height: 150px; }
-    .avatar-eyes { gap: 22px; margin-bottom: 16px; }
-    .eye { width: 12px; height: 12px; }
-    .mouth { width: 24px; }
-  }
+  .btn-send { background:var(--accent); color:var(--bg); }
+  .btn-send:disabled { opacity:0.35; cursor:default; }
 </style>
 </head>
 <body>
 
-<!-- Avatar -->
-<div class="avatar-area">
-  <div class="avatar-container">
-    <div class="avatar-ring" id="avatarRing"></div>
-    <div class="avatar-face">
-      <div class="avatar-eyes">
-        <div class="eye"></div>
-        <div class="eye"></div>
-      </div>
-      <div class="mouth" id="mouth"></div>
-    </div>
+<!-- 3D Avatar -->
+<div class="avatar-section">
+  <canvas id="avatarCanvas"></canvas>
+  <div class="loading-overlay" id="loadingOverlay">
+    <div class="spinner"></div>
+    <div class="loading-text">Loading avatar...</div>
   </div>
-  <div class="avatar-name" id="avatarName">Emma</div>
-  <div class="avatar-status" id="status">Ready to chat</div>
-  <div class="wave-bar" id="waveBar"></div>
+  <div class="avatar-overlay">
+    <div class="avatar-name" id="avatarName">Emma</div>
+    <div class="avatar-status" id="status">Ready to chat</div>
+  </div>
 </div>
 
 <!-- Chat -->
 <div class="chat-area" id="chatArea">
-  <div class="msg system">Say something or type below to start chatting!</div>
+  <div class="msg system">Say something or type below to start!</div>
 </div>
 
 <!-- Input -->
 <div class="input-area">
   <input type="text" class="text-input" id="textInput" placeholder="Type a message..." autocomplete="off">
-  <button class="btn-mic" id="btnMic" title="Hold to record">
+  <button class="btn btn-mic" id="btnMic" title="Hold to record">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
       <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-      <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-      <line x1="12" y1="19" x2="12" y2="23"/>
+      <path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/>
       <line x1="8" y1="23" x2="16" y2="23"/>
     </svg>
   </button>
-  <button class="btn-send" id="btnSend" title="Send text" disabled>
-    <svg viewBox="0 0 24 24" fill="currentColor">
-      <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
-    </svg>
+  <button class="btn btn-send" id="btnSend" title="Send" disabled>
+    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
   </button>
 </div>
 
-<script>
+<!-- Three.js + GLTFLoader -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ============ CONFIG ============
 const API_BASE = window.location.origin;
+const sessionId = 'web_' + Math.random().toString(36).slice(2, 10);
+
+// Ready Player Me avatar — half-body with morph targets
+// You can replace this URL with any RPM avatar GLB
+const AVATAR_URL = 'https://models.readyplayer.me/64bfa15f0e72c63d7c3934a6.glb?morphTargets=ARKit,Oculus%20Visemes&textureAtlas=none';
+
+// DOM
+const canvas = document.getElementById('avatarCanvas');
 const chatArea = document.getElementById('chatArea');
 const textInput = document.getElementById('textInput');
 const btnMic = document.getElementById('btnMic');
 const btnSend = document.getElementById('btnSend');
-const mouth = document.getElementById('mouth');
-const avatarRing = document.getElementById('avatarRing');
 const avatarName = document.getElementById('avatarName');
 const statusEl = document.getElementById('status');
-const waveBar = document.getElementById('waveBar');
+const loadingOverlay = document.getElementById('loadingOverlay');
 
-// Session ID (persists in tab)
-const sessionId = 'web_' + Math.random().toString(36).slice(2, 10);
-
-let isRecording = false;
-let mediaRecorder = null;
-let audioChunks = [];
-let audioContext = null;
-let analyser = null;
+let isRecording = false, mediaRecorder = null, audioChunks = [];
 let isProcessing = false;
+let audioContext = null;
 
-// Wave bars
-for (let i = 0; i < 12; i++) {
-  const bar = document.createElement('span');
-  waveBar.appendChild(bar);
+// ============ THREE.JS SCENE ============
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.2;
+
+const scene = new THREE.Scene();
+
+const camera = new THREE.PerspectiveCamera(28, canvas.clientWidth / canvas.clientHeight, 0.1, 100);
+camera.position.set(0, 1.55, 0.8);
+
+// Lights
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+scene.add(ambientLight);
+
+const keyLight = new THREE.DirectionalLight(0xffffff, 1.5);
+keyLight.position.set(1, 2, 2);
+scene.add(keyLight);
+
+const fillLight = new THREE.DirectionalLight(0x8888ff, 0.5);
+fillLight.position.set(-1, 1, 1);
+scene.add(fillLight);
+
+const rimLight = new THREE.DirectionalLight(0x6c63ff, 0.8);
+rimLight.position.set(0, 1, -2);
+scene.add(rimLight);
+
+// Controls (limited)
+const controls = new OrbitControls(camera, canvas);
+controls.target.set(0, 1.5, 0);
+controls.enablePan = false;
+controls.enableZoom = false;
+controls.minPolarAngle = Math.PI / 3;
+controls.maxPolarAngle = Math.PI / 2;
+controls.minAzimuthAngle = -Math.PI / 6;
+controls.maxAzimuthAngle = Math.PI / 6;
+controls.update();
+
+// ============ AVATAR LOADING ============
+let headMesh = null;
+const morphTargetMap = {};
+
+// Viseme names from Ready Player Me (Oculus Visemes)
+const VISEME_NAMES = [
+  'viseme_sil', 'viseme_PP', 'viseme_FF', 'viseme_TH',
+  'viseme_DD', 'viseme_kk', 'viseme_CH', 'viseme_SS',
+  'viseme_nn', 'viseme_RR', 'viseme_aa', 'viseme_E',
+  'viseme_I', 'viseme_O', 'viseme_U'
+];
+
+const loader = new GLTFLoader();
+loader.load(
+  AVATAR_URL,
+  (gltf) => {
+    const model = gltf.scene;
+    scene.add(model);
+
+    // Find the head mesh with morph targets
+    model.traverse((child) => {
+      if (child.isMesh && child.morphTargetDictionary) {
+        const dict = child.morphTargetDictionary;
+        // Check if this mesh has visemes
+        if ('viseme_aa' in dict || 'mouthOpen' in dict) {
+          headMesh = child;
+          // Map morph target names to indices
+          for (const [name, index] of Object.entries(dict)) {
+            morphTargetMap[name] = index;
+          }
+          console.log('Head mesh found:', Object.keys(dict).length, 'morph targets');
+        }
+      }
+    });
+
+    loadingOverlay.classList.add('hidden');
+    console.log('Avatar loaded!');
+  },
+  (progress) => {
+    if (progress.total) {
+      const pct = Math.round((progress.loaded / progress.total) * 100);
+      loadingOverlay.querySelector('.loading-text').textContent = `Loading avatar... ${pct}%`;
+    }
+  },
+  (error) => {
+    console.error('Avatar load error:', error);
+    loadingOverlay.querySelector('.loading-text').textContent = 'Failed to load avatar';
+  }
+);
+
+// ============ MORPH TARGET ANIMATION ============
+let currentVisemes = {};
+let targetVisemes = {};
+let isSpeaking = false;
+
+function setMorphTarget(name, value) {
+  if (!headMesh || !(name in morphTargetMap)) return;
+  headMesh.morphTargetInfluences[morphTargetMap[name]] = value;
 }
-const waveBars = waveBar.querySelectorAll('span');
 
-// ============ AGENT NAME ============
+function resetAllVisemes() {
+  VISEME_NAMES.forEach(v => setMorphTarget(v, 0));
+  setMorphTarget('mouthOpen', 0);
+  setMorphTarget('jawOpen', 0);
+}
+
+// Map audio frequency bands to visemes for realistic lipsync
+function updateVisemesFromAudio(dataArray) {
+  if (!headMesh) return;
+
+  // Get energy in different frequency bands
+  const low = dataArray.slice(0, 8).reduce((a, b) => a + b, 0) / (8 * 255);     // vowels
+  const mid = dataArray.slice(8, 24).reduce((a, b) => a + b, 0) / (16 * 255);    // consonants
+  const high = dataArray.slice(24, 48).reduce((a, b) => a + b, 0) / (24 * 255);  // sibilants
+  const overall = dataArray.slice(0, 32).reduce((a, b) => a + b, 0) / (32 * 255);
+
+  // Threshold — don't animate below this
+  if (overall < 0.05) {
+    resetAllVisemes();
+    return;
+  }
+
+  // Reset all first
+  VISEME_NAMES.forEach(v => setMorphTarget(v, 0));
+
+  // Map frequencies to viseme groups
+  const jawOpen = Math.min(1, overall * 2.5);
+  setMorphTarget('jawOpen', jawOpen);
+  setMorphTarget('mouthOpen', jawOpen * 0.7);
+
+  // Vowels (low frequency emphasis)
+  if (low > 0.15) {
+    setMorphTarget('viseme_aa', Math.min(1, low * 2.5));
+    setMorphTarget('viseme_O', Math.min(1, low * 1.5));
+  }
+
+  // Mid consonants
+  if (mid > 0.1) {
+    setMorphTarget('viseme_DD', Math.min(1, mid * 2));
+    setMorphTarget('viseme_nn', Math.min(1, mid * 1.5));
+  }
+
+  // High frequency (s, f, th)
+  if (high > 0.08) {
+    setMorphTarget('viseme_SS', Math.min(1, high * 3));
+    setMorphTarget('viseme_FF', Math.min(1, high * 2));
+  }
+
+  // Lip closure for certain sounds
+  if (mid > 0.2 && low < 0.1) {
+    setMorphTarget('viseme_PP', Math.min(1, mid * 2));
+  }
+}
+
+// Idle animation (subtle breathing + blinking)
+let idleTime = 0;
+function updateIdle(dt) {
+  if (!headMesh) return;
+  idleTime += dt;
+
+  // Breathing
+  const breath = Math.sin(idleTime * 1.2) * 0.02;
+  if (headMesh.parent) {
+    headMesh.parent.position.y = breath;
+  }
+
+  // Blinking
+  const blinkCycle = idleTime % 4;
+  let blinkVal = 0;
+  if (blinkCycle > 3.7 && blinkCycle < 3.9) {
+    blinkVal = Math.sin((blinkCycle - 3.7) / 0.2 * Math.PI);
+  }
+  setMorphTarget('eyeBlinkLeft', blinkVal);
+  setMorphTarget('eyeBlinkRight', blinkVal);
+
+  // Subtle smile when idle
+  if (!isSpeaking) {
+    setMorphTarget('mouthSmileLeft', 0.15);
+    setMorphTarget('mouthSmileRight', 0.15);
+  }
+}
+
+// ============ RENDER LOOP ============
+const clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = clock.getDelta();
+
+  updateIdle(dt);
+  controls.update();
+
+  const w = canvas.clientWidth;
+  const h = canvas.clientHeight;
+  if (canvas.width !== w || canvas.height !== h) {
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  }
+
+  renderer.render(scene, camera);
+}
+animate();
+
+// ============ AUDIO PLAYBACK + LIPSYNC ============
+function playAudioWithLipsync(audioBlob) {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(audioBlob);
+    const audio = new Audio(url);
+
+    if (!audioContext) {
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    }
+
+    const source = audioContext.createMediaElementSource(audio);
+    const analyser = audioContext.createAnalyser();
+    analyser.fftSize = 256;
+    source.connect(analyser);
+    analyser.connect(audioContext.destination);
+
+    const dataArray = new Uint8Array(analyser.frequencyBinCount);
+    isSpeaking = true;
+
+    function animateLipsync() {
+      if (audio.paused || audio.ended) {
+        isSpeaking = false;
+        resetAllVisemes();
+        URL.revokeObjectURL(url);
+        resolve();
+        return;
+      }
+      analyser.getByteFrequencyData(dataArray);
+      updateVisemesFromAudio(dataArray);
+      requestAnimationFrame(animateLipsync);
+    }
+
+    audio.onplay = () => requestAnimationFrame(animateLipsync);
+    audio.onended = () => { isSpeaking = false; resetAllVisemes(); resolve(); };
+    audio.onerror = () => { isSpeaking = false; resolve(); };
+    audio.play().catch(() => { isSpeaking = false; resolve(); });
+  });
+}
+
+// ============ LOAD AGENT NAME ============
 async function loadAgentName() {
   try {
     const res = await fetch(`${API_BASE}/api/chat/info`);
@@ -373,75 +468,7 @@ function addMessage(text, role) {
   chatArea.appendChild(div);
   chatArea.scrollTop = chatArea.scrollHeight;
 }
-
-function setStatus(text) {
-  statusEl.textContent = text;
-}
-
-// ============ AUDIO PLAYBACK + AVATAR ANIMATION ============
-function playAudioWithAnimation(audioBlob) {
-  return new Promise((resolve) => {
-    const url = URL.createObjectURL(audioBlob);
-    const audio = new Audio(url);
-
-    if (!audioContext) {
-      audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    }
-
-    const source = audioContext.createMediaElementSource(audio);
-    analyser = audioContext.createAnalyser();
-    analyser.fftSize = 256;
-    source.connect(analyser);
-    analyser.connect(audioContext.destination);
-
-    const dataArray = new Uint8Array(analyser.frequencyBinCount);
-
-    mouth.classList.add('speaking');
-    avatarRing.classList.add('speaking');
-    waveBar.classList.add('active');
-
-    function animate() {
-      if (audio.paused || audio.ended) {
-        mouth.classList.remove('speaking');
-        avatarRing.classList.remove('speaking');
-        waveBar.classList.remove('active');
-        mouth.style.height = '';
-        mouth.style.width = '';
-        URL.revokeObjectURL(url);
-        resolve();
-        return;
-      }
-
-      analyser.getByteFrequencyData(dataArray);
-
-      // Mouth size based on volume
-      const avg = dataArray.slice(0, 20).reduce((a, b) => a + b, 0) / 20;
-      const mouthH = Math.max(6, Math.min(22, avg / 8));
-      const mouthW = Math.max(24, Math.min(36, 24 + avg / 15));
-      mouth.style.height = mouthH + 'px';
-      mouth.style.width = mouthW + 'px';
-
-      // Wave bars
-      waveBars.forEach((bar, i) => {
-        const val = dataArray[i * 4] || 0;
-        bar.style.height = Math.max(3, val / 8) + 'px';
-      });
-
-      requestAnimationFrame(animate);
-    }
-
-    audio.onplay = () => requestAnimationFrame(animate);
-    audio.onended = () => {
-      mouth.classList.remove('speaking');
-      avatarRing.classList.remove('speaking');
-      waveBar.classList.remove('active');
-      resolve();
-    };
-    audio.onerror = () => resolve();
-
-    audio.play().catch(() => resolve());
-  });
-}
+function setStatus(text) { statusEl.textContent = text; }
 
 // ============ SEND TEXT ============
 async function sendText(text) {
@@ -449,7 +476,6 @@ async function sendText(text) {
   isProcessing = true;
   btnSend.disabled = true;
   btnMic.disabled = true;
-
   addMessage(text, 'user');
   textInput.value = '';
   setStatus('Thinking...');
@@ -460,23 +486,19 @@ async function sendText(text) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text, session_id: sessionId }),
     });
-
     const data = await res.json();
     addMessage(data.text, 'assistant');
 
     if (data.audio_base64) {
       setStatus('Speaking...');
-      const audioBytes = Uint8Array.from(atob(data.audio_base64), c => c.charCodeAt(0));
-      const blob = new Blob([audioBytes], { type: 'audio/mp3' });
-      await playAudioWithAnimation(blob);
+      const bytes = Uint8Array.from(atob(data.audio_base64), c => c.charCodeAt(0));
+      await playAudioWithLipsync(new Blob([bytes], { type: 'audio/mp3' }));
     }
-
     setStatus('Ready to chat');
   } catch(e) {
     setStatus('Error — try again');
     console.error(e);
   }
-
   isProcessing = false;
   btnSend.disabled = !textInput.value.trim();
   btnMic.disabled = false;
@@ -488,39 +510,27 @@ async function sendAudio(audioBlob) {
   isProcessing = true;
   btnSend.disabled = true;
   btnMic.disabled = true;
-
   setStatus('Transcribing...');
 
   try {
-    const formData = new FormData();
-    formData.append('audio', audioBlob, 'recording.webm');
-    formData.append('session_id', sessionId);
-
-    const res = await fetch(`${API_BASE}/api/chat`, {
-      method: 'POST',
-      body: formData,
-    });
-
+    const fd = new FormData();
+    fd.append('audio', audioBlob, 'recording.webm');
+    fd.append('session_id', sessionId);
+    const res = await fetch(`${API_BASE}/api/chat`, { method: 'POST', body: fd });
     const data = await res.json();
-
-    if (data.transcription) {
-      addMessage(data.transcription, 'user');
-    }
+    if (data.transcription) addMessage(data.transcription, 'user');
     addMessage(data.text, 'assistant');
 
     if (data.audio_base64) {
       setStatus('Speaking...');
-      const audioBytes = Uint8Array.from(atob(data.audio_base64), c => c.charCodeAt(0));
-      const blob = new Blob([audioBytes], { type: 'audio/mp3' });
-      await playAudioWithAnimation(blob);
+      const bytes = Uint8Array.from(atob(data.audio_base64), c => c.charCodeAt(0));
+      await playAudioWithLipsync(new Blob([bytes], { type: 'audio/mp3' }));
     }
-
     setStatus('Ready to chat');
   } catch(e) {
     setStatus('Error — try again');
     console.error(e);
   }
-
   isProcessing = false;
   btnSend.disabled = !textInput.value.trim();
   btnMic.disabled = false;
@@ -532,57 +542,38 @@ async function startRecording() {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     mediaRecorder = new MediaRecorder(stream);
     audioChunks = [];
-
     mediaRecorder.ondataavailable = (e) => audioChunks.push(e.data);
     mediaRecorder.onstop = () => {
       stream.getTracks().forEach(t => t.stop());
       const blob = new Blob(audioChunks, { type: 'audio/webm' });
-      if (blob.size > 1000) {
-        sendAudio(blob);
-      }
+      if (blob.size > 1000) sendAudio(blob);
     };
-
     mediaRecorder.start();
     isRecording = true;
     btnMic.classList.add('recording');
     setStatus('Recording... release to send');
   } catch(e) {
     setStatus('Microphone access denied');
-    console.error(e);
   }
 }
 
 function stopRecording() {
-  if (mediaRecorder && mediaRecorder.state === 'recording') {
-    mediaRecorder.stop();
-  }
+  if (mediaRecorder && mediaRecorder.state === 'recording') mediaRecorder.stop();
   isRecording = false;
   btnMic.classList.remove('recording');
 }
 
-// ============ EVENT LISTENERS ============
-
-// Mic: press and hold
+// ============ EVENTS ============
 btnMic.addEventListener('mousedown', (e) => { e.preventDefault(); startRecording(); });
-btnMic.addEventListener('mouseup', () => stopRecording());
+btnMic.addEventListener('mouseup', stopRecording);
 btnMic.addEventListener('mouseleave', () => { if (isRecording) stopRecording(); });
-
-// Touch support
 btnMic.addEventListener('touchstart', (e) => { e.preventDefault(); startRecording(); });
 btnMic.addEventListener('touchend', (e) => { e.preventDefault(); stopRecording(); });
 
-// Text input
-textInput.addEventListener('input', () => {
-  btnSend.disabled = !textInput.value.trim() || isProcessing;
-});
-
+textInput.addEventListener('input', () => { btnSend.disabled = !textInput.value.trim() || isProcessing; });
 textInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    sendText(textInput.value);
-  }
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendText(textInput.value); }
 });
-
 btnSend.addEventListener('click', () => sendText(textInput.value));
 </script>
 </body>
