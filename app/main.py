@@ -110,43 +110,25 @@ async def _send_voice_reply(phone: str, text: str, reply_to: str = None):
         audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")
         await uazapi_service.send_voice(phone, audio_b64, reply_to=reply_to)
     except Exception as e:
-        logger.warning(f"⚠️ Falha ao enviar áudio TTS: {e}")
+        logger.warning(f"Falha ao enviar áudio TTS: {e}")
 
 
-async def process_text_message(phone: str, text: str, message_id: str, push_name: str = "Aluno"):
-    """Processa mensagem de texto via agente conversacional."""
-    try:
-        await uazapi_service.send_presence(phone, "composing")
-        reply = await agent.process_message(phone, text, push_name)
-        await uazapi_service.send_text(phone, reply, reply_to=message_id)
-
-        # Se a resposta contém inglês (frase para praticar), enviar áudio também
-        if _has_english_phrase(reply):
-            await uazapi_service.send_presence(phone, "recording")
-            english_part = _extract_english_for_tts(reply)
-            await _send_voice_reply(phone, english_part)
-
-    except Exception as e:
-        logger.error(f"❌ Erro ao processar texto: {e}", exc_info=True)
-        await uazapi_service.send_text(
-            phone, "Desculpe, tive um problema. Tente novamente em alguns segundos!"
-        )
-
-
-def _has_english_phrase(text: str) -> bool:
-    """Detecta se a resposta contém uma frase em inglês entre aspas (frase para praticar)."""
-    return '"' in text and any(c.isascii() and c.isalpha() for c in text)
-
-
-def _extract_english_for_tts(text: str) -> str:
-    """Extrai texto entre aspas para gerar áudio TTS."""
+async def _send_voice_parts(phone: str, text: str):
+    """Divide a resposta em partes e envia cada uma como áudio separado."""
     import re
-    # Buscar texto entre aspas (frase para praticar)
-    matches = re.findall(r'"([^"]+)"', text)
-    if matches:
-        # Pegar a frase mais longa entre aspas (provavelmente a frase de prática)
-        return max(matches, key=len)
-    return text
+    # Dividir por parágrafos ou por \n\n
+    parts = [p.strip() for p in re.split(r'\n\n+', text) if p.strip()]
+    if not parts:
+        parts = [text]
+
+    for part in parts:
+        # Limpar markdown/emojis para TTS
+        clean = re.sub(r'[*_~`#]', '', part)
+        clean = re.sub(r'[\U0001f600-\U0001f9ff]', '', clean)  # emojis
+        clean = clean.strip()
+        if clean:
+            await uazapi_service.send_presence(phone, "recording")
+            await _send_voice_reply(phone, clean)
 
 
 async def _transcribe_audio(audio_bytes: bytes, mimetype: str) -> str:
@@ -162,21 +144,22 @@ async def _transcribe_audio(audio_bytes: bytes, mimetype: str) -> str:
     return result.text.strip()
 
 
-def _is_pronunciation_attempt(transcription: str, reference_text: str) -> bool:
-    """Verifica se a transcrição é uma tentativa de pronunciar a frase de referência."""
-    if not reference_text:
-        return False
-    ref_words = set(reference_text.lower().split())
-    trans_words = set(transcription.lower().split())
-    if not ref_words:
-        return False
-    # Se pelo menos 40% das palavras da referência aparecem na transcrição
-    overlap = len(ref_words & trans_words) / len(ref_words)
-    return overlap >= 0.4
+async def process_text_message(phone: str, text: str, message_id: str, push_name: str = "Aluno"):
+    """Processa mensagem de texto via agente conversacional."""
+    try:
+        await uazapi_service.send_presence(phone, "composing")
+        reply = await agent.process_message(phone, text, push_name)
+        await uazapi_service.send_text(phone, reply, reply_to=message_id)
+
+    except Exception as e:
+        logger.error(f"Erro ao processar texto: {e}", exc_info=True)
+        await uazapi_service.send_text(
+            phone, "Desculpe, tive um problema. Tente novamente em alguns segundos!"
+        )
 
 
 async def process_audio_message(phone: str, message_id: str, push_name: str = "Aluno"):
-    """Processa áudio: transcreve primeiro, decide se é prática ou conversa."""
+    """Processa áudio: transcreve com Whisper e conversa. Sempre conversa."""
     try:
         await uazapi_service.send_presence(phone, "composing")
 
@@ -189,81 +172,20 @@ async def process_audio_message(phone: str, message_id: str, push_name: str = "A
         logger.info(f"Transcrição: {transcription}")
 
         if not transcription:
-            await uazapi_service.send_text(phone, "Não consegui entender o áudio. Pode tentar de novo?", reply_to=message_id)
+            await _send_voice_reply(phone, "Não consegui entender o áudio. Pode tentar de novo?")
             return
 
-        # 3. Verificar se há sessão ativa e se o áudio é tentativa de pronúncia
-        session = await sm.session_manager.get_session(phone)
-        is_practice = session and _is_pronunciation_attempt(transcription, session.reference_text)
+        # 3. Passar pro agente como conversa normal — ele decide o que fazer
+        reply = await agent.process_message(phone, transcription, push_name)
 
-        if is_practice:
-            # === MODO PRÁTICA: avaliação de pronúncia ===
-            reference_text = session.reference_text
-            logger.info(f"Modo prática: '{transcription}' → ref: '{reference_text}'")
-
-            audio_format = "ogg" if "ogg" in mimetype else "mp3" if "mp3" in mimetype else "ogg"
-
-            # Azure Pronunciation Assessment
-            pronunciation_result = await azure_service.assess_pronunciation(
-                audio_bytes=audio_bytes,
-                reference_text=reference_text,
-                audio_format=audio_format,
-            )
-            logger.info(f"Score: {pronunciation_result.overall_score:.0f}/100")
-
-            # Analisar erros brasileiros
-            analysis = error_analyzer.analyze(pronunciation_result)
-
-            # Atualizar sessão
-            await sm.session_manager.update_session(phone, pronunciation_result.overall_score)
-
-            # Resumo de erros
-            errors_summary = "None"
-            if analysis.brazilian_errors:
-                errors_summary = "; ".join(
-                    [
-                        f"{e.word} (/{e.expected_phoneme}/ score:{e.accuracy:.0f})"
-                        for e in analysis.brazilian_errors[:5]
-                    ]
-                )
-
-            # Feedback via agente
-            score = pronunciation_result.overall_score
-            reply = await agent.process_audio_result(
-                phone=phone,
-                reference_text=reference_text,
-                score=score,
-                accuracy=pronunciation_result.accuracy_score,
-                fluency=pronunciation_result.fluency_score,
-                completeness=pronunciation_result.completeness_score,
-                errors_summary=errors_summary,
-                attempt_number=session.attempt_number,
-                push_name=push_name,
-            )
-
-            # Feedback como áudio
-            await uazapi_service.send_presence(phone, "recording")
-            await _send_voice_reply(phone, reply)
-
-        else:
-            # === MODO CONVERSA: tratar como mensagem de texto ===
-            logger.info(f"Modo conversa: '{transcription}'")
-            reply = await agent.process_message(phone, transcription, push_name)
-
-            # Responder com texto
-            await uazapi_service.send_text(phone, reply, reply_to=message_id)
-
-            # Se a resposta contém frase em inglês, enviar áudio também
-            if _has_english_phrase(reply):
-                await uazapi_service.send_presence(phone, "recording")
-                english_part = _extract_english_for_tts(reply)
-                await _send_voice_reply(phone, english_part)
+        # 4. Responder com áudio(s) — já que o aluno mandou áudio, respondemos em áudio
+        await _send_voice_parts(phone, reply)
 
         logger.info(f"Resposta enviada para {phone}")
 
     except Exception as e:
         logger.error(f"Erro ao processar áudio: {e}", exc_info=True)
-        await uazapi_service.send_text(
+        await _send_voice_reply(
             phone,
             "Tive um problema ao processar seu áudio. Tente gravar novamente!",
         )

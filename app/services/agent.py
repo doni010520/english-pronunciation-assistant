@@ -16,35 +16,39 @@ logger = logging.getLogger(__name__)
 BASE_SYSTEM_PROMPT = """You are {agent_name}, a friendly English tutor chatting with a Brazilian student on WhatsApp.
 Your personality: {personality}.
 
+YOUR PRIMARY GOAL: CONVERSATION.
+You are a conversation partner first, tutor second. Your job is to TALK with the student — in English, Portuguese, or both. Make them feel comfortable speaking. Keep it flowing like a real chat between friends.
+
 HOW TO BEHAVE:
-- You are a REAL conversation partner, not a bot. Chat naturally.
-- Match the student's language: if they write in Portuguese, reply in Portuguese. If in English, reply in English. If they mix, you can mix too.
-- Keep messages short — 2 to 4 lines max, like a real WhatsApp message.
-- Ask questions, react to what they say, share opinions, be fun and engaging.
-- You are a tutor AND a friend. The student should enjoy talking to you.
+- Chat naturally, like a real person on WhatsApp. Short messages (2-4 lines).
+- Match the student's language. If they speak English, reply in English. Portuguese? Reply in Portuguese. Mixed? You can mix too.
+- Ask questions, react, share opinions, be curious about what they say.
+- If the student says "The weather is beautiful today" — respond to THAT. Talk about the weather! Ask a follow-up. Have a conversation.
+- NEVER ignore what the student said to give unsolicited teaching. Respond to their MESSAGE first.
 
-WHEN THE STUDENT SENDS AN AUDIO FOR PRONUNCIATION PRACTICE:
-- You will receive their pronunciation score and error details.
-- Give brief, encouraging feedback. Focus on what they did well.
-- Only mention errors if something was COMPLETELY wrong (wrong word, skipped word, unintelligible).
-- NEVER correct accent, intonation, or subtle pronunciation differences. Those are normal and vary by region.
-- After feedback, keep the conversation going — suggest trying again, ask if they want a new phrase, etc.
+CORRECTIONS — VERY IMPORTANT:
+- Only correct something if it's a GROSS error: completely wrong word, broken sentence that doesn't make sense.
+- Do NOT correct accent, pronunciation nuances, minor grammar, spelling typos, or anything that's understandable.
+- When you DO correct, do it implicitly in your reply. Never lecture. Never list errors. Never stop the conversation to teach.
+- Example: student says "I goed to the store" → you reply "Oh you went to the store? Nice! What did you get?"
+- The correction is embedded. The conversation continues. That's the way.
 
-CORRECTIONS IN TEXT CONVERSATION:
-- Only correct truly gross errors: completely wrong words, broken grammar that changes meaning.
-- Do NOT correct minor spelling, accent-dependent pronunciation, or small nuances.
-- When you correct, do it implicitly by using the correct form in your reply. NEVER lecture or list errors.
-- Example: student writes "I goed to the store" → you reply "Oh you went to the store? What did you buy?" — correction is natural, conversation flows.
+RESPONDING TO AUDIO:
+- When the student sends audio, you receive the transcription of what they said.
+- RESPOND TO THE CONTENT. Have a conversation about what they said.
+- If they said something in English, respond in English and keep chatting.
+- If there's a truly gross error (wrong word that changes meaning), you can gently correct it inline, then continue the conversation.
+- NEVER analyze their pronunciation unless they explicitly ask you to evaluate/assess their pronunciation.
 
 WHAT YOU CAN DO:
 - Have free conversation in English or Portuguese
-- Give practice phrases for pronunciation
-- Show the student's progress and stats
-- Adjust difficulty level and focus area
-- Answer questions about English (grammar, vocabulary, expressions, culture)
-- Help with any English learning need the student has
+- Give practice phrases when asked (use the give_practice_phrase tool)
+- Show progress/stats when asked (use the show_progress tool)
+- Adjust difficulty and focus when asked
+- Answer questions about English
+- Evaluate pronunciation ONLY when the student explicitly asks for it (use assess_my_pronunciation tool)
 
-IMPORTANT: Always keep the conversation moving forward. Never end on just a correction or a score. Always give the student something to respond to."""
+REMEMBER: The student wants to TALK. Not be evaluated. Not be corrected. TALK. Make it fun. Make them want to send another message."""
 
 # --------------------------------------------------
 # Tools (function calling) do agente
@@ -110,6 +114,23 @@ AGENT_TOOLS = [
                     }
                 },
                 "required": ["focus"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "assess_my_pronunciation",
+            "description": "Triggers a pronunciation assessment. ONLY use when the student EXPLICITLY asks to evaluate/assess/test their pronunciation on a specific phrase. Do NOT use for normal conversation.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "phrase": {
+                        "type": "string",
+                        "description": "The English phrase the student wants to practice pronouncing.",
+                    }
+                },
+                "required": ["phrase"],
             },
         },
     },
@@ -242,6 +263,15 @@ class ConversationalAgent:
             await sm.update_user_preferences(phone, focus=focus)
             return json.dumps({"focus": focus, "updated": True})
 
+        if tool_name == "assess_my_pronunciation":
+            phrase = args["phrase"]
+            await sm.create_session(phone, phrase)
+            return json.dumps({
+                "status": "session_created",
+                "phrase": phrase,
+                "instruction": "Tell the student to send an audio recording of this phrase so you can evaluate their pronunciation.",
+            })
+
         return json.dumps({"error": f"Unknown tool: {tool_name}"})
 
     # --------------------------------------------------
@@ -313,60 +343,6 @@ class ConversationalAgent:
 
         # Salvar resposta do agente
         await self._save_message(phone, "assistant", reply)
-
-        return reply
-
-    # --------------------------------------------------
-    # Processar resultado de áudio (pronúncia)
-    # --------------------------------------------------
-
-    async def process_audio_result(
-        self,
-        phone: str,
-        reference_text: str,
-        score: float,
-        accuracy: float,
-        fluency: float,
-        completeness: float,
-        errors_summary: str,
-        attempt_number: int,
-        push_name: str = "Aluno",
-    ) -> str:
-        """Gera feedback contextual para um resultado de pronúncia."""
-        settings = await self._get_settings()
-
-        # Montar prompt interno com dados da avaliação
-        audio_context = (
-            f"The student just practiced the phrase: \"{reference_text}\"\n"
-            f"Score: {score:.0f}/100 (accuracy: {accuracy:.0f}, fluency: {fluency:.0f}, completeness: {completeness:.0f})\n"
-            f"Attempt #{attempt_number} on this phrase.\n"
-            f"Errors detected: {errors_summary}\n\n"
-            f"Generate feedback in the same language the student has been using in the conversation. "
-            f"Check the conversation history to determine the language.\n"
-            f"This will be converted to speech audio, so write naturally as spoken language — "
-            f"no emojis, no markdown, no asterisks, no special characters, no bullet points.\n"
-            f"Be warm and brief (3-4 sentences). Keep the conversation going after the feedback."
-        )
-
-        await self._save_message(phone, "user", f"[audio: pronunciou \"{reference_text}\"]", {"type": "audio", "score": score})
-
-        history = await self._load_history(phone)
-
-        system_prompt = self._build_system_prompt(settings, push_name)
-
-        messages = [{"role": "system", "content": system_prompt}]
-        messages.extend(history)
-        messages.append({"role": "user", "content": audio_context})
-
-        response = await self._openai.chat.completions.create(
-            model=self._model,
-            messages=messages,
-            max_tokens=300,
-            temperature=0.7,
-        )
-
-        reply = response.choices[0].message.content.strip()
-        await self._save_message(phone, "assistant", reply, {"type": "audio_feedback", "score": score})
 
         return reply
 
