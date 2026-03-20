@@ -105,7 +105,7 @@ async def verify_admin(authorization: str = Header(None)):
 # MESSAGE BUFFER (debounce)
 # ============================================
 
-BUFFER_DELAY_SECONDS = 4  # esperar 4s de silêncio antes de processar
+BUFFER_DELAY_SECONDS = 10  # esperar 10s de silêncio antes de processar
 
 
 @dataclass
