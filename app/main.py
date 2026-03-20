@@ -219,20 +219,7 @@ async def process_audio_message(phone: str, message_id: str, push_name: str = "A
             push_name=push_name,
         )
 
-        # Score visual (apenas o score como texto)
-        if score >= 85:
-            score_line = f"🌟 *Score: {score:.0f}/100*"
-        elif score >= 70:
-            score_line = f"👏 *Score: {score:.0f}/100*"
-        elif score >= 55:
-            score_line = f"💪 *Score: {score:.0f}/100*"
-        else:
-            score_line = f"🌱 *Score: {score:.0f}/100*"
-
-        # Enviar apenas o score como texto
-        await uazapi_service.send_text(phone, score_line, reply_to=message_id)
-
-        # Feedback detalhado apenas como áudio
+        # Feedback apenas como áudio
         await uazapi_service.send_presence(phone, "recording")
         await _send_voice_reply(phone, reply)
 
