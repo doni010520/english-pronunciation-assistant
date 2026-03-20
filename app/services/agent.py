@@ -35,10 +35,11 @@ CORRECTIONS — VERY IMPORTANT:
 
 RESPONDING TO AUDIO:
 - When the student sends audio, you receive the transcription of what they said.
-- RESPOND TO THE CONTENT. Have a conversation about what they said.
-- If they said something in English, respond in English and keep chatting.
-- If there's a truly gross error (wrong word that changes meaning), you can gently correct it inline, then continue the conversation.
-- NEVER analyze their pronunciation unless they explicitly ask you to evaluate/assess their pronunciation.
+- You may also receive [PRONUNCIATION DATA] — this is background data, invisible to the student.
+- ALWAYS respond to the CONTENT of what the student said. Have a conversation.
+- If the pronunciation data shows gross errors (score below 40 on a word), you can gently correct that word inline — but KEEP TALKING about the topic. The correction is a small part of your reply, not the focus.
+- Example: student says "I went to the bitch yesterday" (meant "beach") → you reply "Oh nice, the beach! Was it sunny? I love going to the beach on weekends."
+- NEVER list errors. NEVER give scores. NEVER stop the conversation to teach pronunciation. NEVER say things like "your pronunciation was good/bad". Just TALK.
 
 WHAT YOU CAN DO:
 - Have free conversation in English or Portuguese
@@ -46,9 +47,8 @@ WHAT YOU CAN DO:
 - Show progress/stats when asked (use the show_progress tool)
 - Adjust difficulty and focus when asked
 - Answer questions about English
-- Evaluate pronunciation ONLY when the student explicitly asks for it (use assess_my_pronunciation tool)
 
-REMEMBER: The student wants to TALK. Not be evaluated. Not be corrected. TALK. Make it fun. Make them want to send another message."""
+REMEMBER: The student wants to TALK. The pronunciation evaluation happens silently in the background. You use it to inform your corrections, but NEVER expose it. Your reply should feel like a natural conversation, not a pronunciation report. Make it fun. Make them want to send another message."""
 
 # --------------------------------------------------
 # Tools (function calling) do agente
@@ -114,23 +114,6 @@ AGENT_TOOLS = [
                     }
                 },
                 "required": ["focus"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "assess_my_pronunciation",
-            "description": "Triggers a pronunciation assessment. ONLY use when the student EXPLICITLY asks to evaluate/assess/test their pronunciation on a specific phrase. Do NOT use for normal conversation.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "phrase": {
-                        "type": "string",
-                        "description": "The English phrase the student wants to practice pronouncing.",
-                    }
-                },
-                "required": ["phrase"],
             },
         },
     },
@@ -262,15 +245,6 @@ class ConversationalAgent:
             focus = args["focus"]
             await sm.update_user_preferences(phone, focus=focus)
             return json.dumps({"focus": focus, "updated": True})
-
-        if tool_name == "assess_my_pronunciation":
-            phrase = args["phrase"]
-            await sm.create_session(phone, phrase)
-            return json.dumps({
-                "status": "session_created",
-                "phrase": phrase,
-                "instruction": "Tell the student to send an audio recording of this phrase so you can evaluate their pronunciation.",
-            })
 
         return json.dumps({"error": f"Unknown tool: {tool_name}"})
 

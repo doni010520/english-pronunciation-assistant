@@ -159,7 +159,7 @@ async def process_text_message(phone: str, text: str, message_id: str, push_name
 
 
 async def process_audio_message(phone: str, message_id: str, push_name: str = "Aluno"):
-    """Processa áudio: transcreve com Whisper e conversa. Sempre conversa."""
+    """Processa áudio: transcreve + avalia pronúncia nos bastidores + conversa."""
     try:
         await uazapi_service.send_presence(phone, "composing")
 
@@ -175,10 +175,59 @@ async def process_audio_message(phone: str, message_id: str, push_name: str = "A
             await _send_voice_reply(phone, "Não consegui entender o áudio. Pode tentar de novo?")
             return
 
-        # 3. Passar pro agente como conversa normal — ele decide o que fazer
-        reply = await agent.process_message(phone, transcription, push_name)
+        # 3. Avaliação de pronúncia nos bastidores (sempre roda)
+        pronunciation_note = ""
+        try:
+            audio_format = "ogg" if "ogg" in mimetype else "mp3" if "mp3" in mimetype else "ogg"
+            pronunciation_result = await azure_service.assess_pronunciation(
+                audio_bytes=audio_bytes,
+                reference_text=transcription,
+                audio_format=audio_format,
+            )
+            score = pronunciation_result.overall_score
 
-        # 4. Responder com áudio(s) — já que o aluno mandou áudio, respondemos em áudio
+            # Analisar erros brasileiros
+            analysis = error_analyzer.analyze(pronunciation_result)
+
+            # Salvar no histórico de sessão
+            try:
+                await sm.session_manager.update_session(phone, score)
+            except Exception:
+                pass
+
+            # Montar nota de pronúncia para o agente (só erros grosseiros)
+            gross_errors = [
+                e for e in (analysis.brazilian_errors or [])
+                if e.accuracy < 40  # só erros bem graves
+            ]
+            if gross_errors:
+                errors_text = ", ".join(
+                    f"'{e.word}' (score {e.accuracy:.0f}/100)"
+                    for e in gross_errors[:3]
+                )
+                pronunciation_note = (
+                    f"\n[PRONUNCIATION DATA — invisible to student, for your reference only: "
+                    f"overall score {score:.0f}/100. "
+                    f"Gross errors: {errors_text}. "
+                    f"If relevant, you may gently correct these inline while continuing the conversation. "
+                    f"Do NOT stop to evaluate or list errors.]"
+                )
+            else:
+                pronunciation_note = (
+                    f"\n[PRONUNCIATION DATA — invisible to student: "
+                    f"score {score:.0f}/100, no gross errors. Do NOT mention the score or pronunciation quality.]"
+                )
+
+            logger.info(f"Pronúncia: score={score:.0f}, erros graves={len(gross_errors)}")
+
+        except Exception as e:
+            logger.warning(f"Avaliação de pronúncia falhou (não bloqueia): {e}")
+
+        # 4. Passar transcrição + nota de pronúncia para o agente CONVERSAR
+        message_for_agent = transcription + pronunciation_note
+        reply = await agent.process_message(phone, message_for_agent, push_name)
+
+        # 5. Responder com áudio(s)
         await _send_voice_parts(phone, reply)
 
         logger.info(f"Resposta enviada para {phone}")
