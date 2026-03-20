@@ -314,74 +314,78 @@ async def process_audio_message(phone: str, message_id: str, push_name: str = No
 @app.post("/webhook/uazapi")
 async def webhook_uazapi(request: Request, background_tasks: BackgroundTasks):
     """
-    Webhook principal que recebe mensagens da Uazapi
-    Aceita qualquer payload JSON para compatibilidade
+    Webhook principal que recebe mensagens da Uazapi.
+
+    Estrutura real do payload Uazapi:
+    {
+        "BaseUrl": "https://...",
+        "EventType": "messages",
+        "message": {
+            "chatid": "557193061031@s.whatsapp.net",
+            "fromMe": false,
+            "messageid": "3EB01839A340678FBD8682",
+            "senderName": "Nome",
+            "text": "conteudo",
+            "messageType": "Conversation" | "AudioMessage",
+            "content": { ... }  // para áudio
+        }
+    }
     """
     try:
         payload = await request.json()
-        logger.info(f"📨 Webhook recebido: {payload}")
 
-        # Filtrar eventos - aceitar variações
-        event = payload.get("event", "")
-        if event not in ["messages", "messages.upsert"]:
+        # Filtrar eventos
+        event = payload.get("EventType", "")
+        if event != "messages":
             return JSONResponse({"status": "ignored", "reason": f"event: {event}"})
 
-        # Extrair mensagem - tentar diferentes estruturas da Uazapi
-        message = payload.get("message") or payload.get("data", {})
-
+        message = payload.get("message")
         if not message:
-            return JSONResponse({"status": "ignored", "reason": "no message data"})
-
-        # Extrair key - pode estar em message.key ou direto no message
-        key = message.get("key", {})
+            return JSONResponse({"status": "ignored", "reason": "no message"})
 
         # Ignorar mensagens enviadas por nós
-        if key.get("fromMe", False):
+        if message.get("fromMe", False) or message.get("wasSentByApi", False):
             return JSONResponse({"status": "ignored", "reason": "from me"})
 
         # Extrair dados
-        remote_jid = key.get("remoteJid", "")
-        if not remote_jid:
-            return JSONResponse({"status": "ignored", "reason": "no remoteJid"})
+        chatid = message.get("chatid", "")
+        if not chatid:
+            return JSONResponse({"status": "ignored", "reason": "no chatid"})
 
-        phone = extract_phone_from_jid(remote_jid)
-        message_id = key.get("id", "")
-        push_name = message.get("pushName", "Aluno")
+        phone = extract_phone_from_jid(chatid)
+        message_id = message.get("messageid", "")
+        push_name = message.get("senderName", "Aluno")
+        msg_type = message.get("messageType", "")
 
-        logger.info(f"📨 Mensagem de {phone} ({push_name})")
+        logger.info(f"📨 Mensagem de {phone} ({push_name}) tipo: {msg_type}")
 
-        # Extrair conteúdo da mensagem
-        msg_content = message.get("message", message)
+        # ID completo (owner:messageid) para download de áudio
+        full_message_id = message.get("id", message_id)
 
-        # Verificar tipo de mensagem
-        if msg_content.get("audioMessage"):
+        # Áudio
+        if msg_type == "AudioMessage":
             background_tasks.add_task(
                 process_audio_message,
                 phone,
-                message_id,
+                full_message_id,
                 push_name
             )
             return JSONResponse({"status": "processing", "type": "audio"})
 
-        # Texto - tentar várias formas
-        text = (
-            msg_content.get("conversation")
-            or msg_content.get("extendedTextMessage", {}).get("text")
-            or message.get("conversation")
-            or ""
-        )
+        # Texto
+        if msg_type in ["Conversation", "ExtendedTextMessage"]:
+            text = message.get("text", "")
+            if text:
+                background_tasks.add_task(
+                    process_text_message,
+                    phone,
+                    text,
+                    message_id
+                )
+                return JSONResponse({"status": "processing", "type": "text"})
 
-        if text:
-            background_tasks.add_task(
-                process_text_message,
-                phone,
-                text,
-                message_id
-            )
-            return JSONResponse({"status": "processing", "type": "text"})
-
-        logger.info(f"⚠️ Tipo de mensagem não suportado: {list(msg_content.keys())}")
-        return JSONResponse({"status": "ignored", "reason": "unsupported message type"})
+        logger.info(f"⚠️ Tipo não suportado: {msg_type}")
+        return JSONResponse({"status": "ignored", "reason": f"unsupported: {msg_type}"})
 
     except Exception as e:
         logger.error(f"❌ Erro no webhook: {str(e)}", exc_info=True)
