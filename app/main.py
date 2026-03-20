@@ -7,8 +7,8 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import redis.asyncio as aioredis
-from fastapi import FastAPI, Request, Header, HTTPException, UploadFile, File
-from fastapi.responses import JSONResponse, HTMLResponse, FileResponse
+from fastapi import FastAPI, Request, Header, HTTPException, UploadFile, File, Form
+from fastapi.responses import JSONResponse, HTMLResponse
 from openai import AsyncOpenAI
 from supabase import acreate_client
 
@@ -511,6 +511,109 @@ async def list_users(authorization: str = Header(None)):
     await verify_admin(authorization)
     users = await sm.session_manager.list_users_with_stats()
     return users
+
+
+# ============================================
+# WEB CHAT (avatar)
+# ============================================
+
+@app.get("/chat", response_class=HTMLResponse)
+async def chat_page():
+    """Serve a página de chat com avatar."""
+    html_path = STATIC_DIR / "chat.html"
+    if not html_path.exists():
+        raise HTTPException(status_code=404, detail="Chat page not found")
+    return HTMLResponse(html_path.read_text(encoding="utf-8"))
+
+
+@app.get("/api/chat/info")
+async def chat_info():
+    """Retorna info do agente para o frontend."""
+    settings = await agent._get_settings()
+    return {"agent_name": settings.get("agent_name", "Emma")}
+
+
+@app.post("/api/chat")
+async def chat_endpoint(
+    request: Request,
+    audio: UploadFile = File(None),
+    text: str = Form(None),
+    session_id: str = Form(None),
+):
+    """
+    Endpoint unificado do chat web.
+    Aceita texto (JSON ou form) ou áudio (multipart form).
+    Retorna: { text, audio_base64, transcription? }
+    """
+    import io
+
+    # Determinar input: JSON body ou multipart form
+    content_type = request.headers.get("content-type", "")
+
+    user_text = None
+    transcription = None
+
+    if "application/json" in content_type:
+        body = await request.json()
+        user_text = body.get("text", "").strip()
+        session_id = body.get("session_id", session_id)
+
+    elif audio and audio.filename:
+        # Áudio enviado — transcrever com Whisper
+        audio_bytes = await audio.read()
+        if len(audio_bytes) < 500:
+            return JSONResponse({"text": "Audio too short. Try again!", "audio_base64": None})
+
+        audio_file = io.BytesIO(audio_bytes)
+        audio_file.name = audio.filename or "recording.webm"
+
+        try:
+            result = await openai_client.audio.transcriptions.create(
+                model="whisper-1",
+                file=audio_file,
+            )
+            transcription = result.text.strip()
+            user_text = transcription
+        except Exception as e:
+            logger.error(f"Whisper falhou: {e}")
+            return JSONResponse({"text": "Could not transcribe audio. Try again!", "audio_base64": None})
+
+    elif text:
+        user_text = text.strip()
+
+    if not user_text:
+        return JSONResponse({"text": "I didn't catch that. Could you try again?", "audio_base64": None})
+
+    # Usar session_id como "phone" para o agente (web sessions)
+    phone = session_id or f"web_{uuid.uuid4().hex[:8]}"
+
+    try:
+        # Processar com o agente
+        reply = await agent.process_message(phone, user_text, "Student")
+
+        # Gerar áudio da resposta
+        audio_b64 = None
+        try:
+            import re
+            # Limpar markdown/emojis para TTS
+            clean_reply = re.sub(r'[*_~`#]', '', reply)
+            clean_reply = re.sub(r'[\U0001f600-\U0001f9ff]', '', clean_reply).strip()
+
+            if clean_reply:
+                tts_bytes = await feedback_generator.text_to_speech(clean_reply)
+                audio_b64 = b64mod.b64encode(tts_bytes).decode("ascii")
+        except Exception as e:
+            logger.warning(f"TTS falhou: {e}")
+
+        response = {"text": reply, "audio_base64": audio_b64}
+        if transcription:
+            response["transcription"] = transcription
+
+        return JSONResponse(response)
+
+    except Exception as e:
+        logger.error(f"Chat error: {e}", exc_info=True)
+        return JSONResponse({"text": "Sorry, something went wrong. Try again!", "audio_base64": None})
 
 
 # ============================================
