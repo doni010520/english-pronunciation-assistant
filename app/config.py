@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     elevenlabs_api_key: str = ""
     elevenlabs_voice_id: str = "21m00Tcm4TlvDq8ikWAM"
     
+    # Admin
+    admin_token: str = "change-me-in-production"
+
     # Server
     host: str = "0.0.0.0"
     port: int = 8000

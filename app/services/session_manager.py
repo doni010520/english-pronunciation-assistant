@@ -289,6 +289,55 @@ class SessionManager:
             .execute()
         )
 
+    async def save_push_name(self, phone: str, push_name: str):
+        """Salva o nome do usuario para exibir no admin."""
+        await (
+            self._client.table("users")
+            .upsert(
+                {
+                    "phone": phone,
+                    "push_name": push_name,
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                },
+                on_conflict="phone",
+            )
+            .execute()
+        )
+
+    async def list_users_with_stats(self) -> list[dict]:
+        """Lista usuarios com estatisticas para o painel admin."""
+        result = await (
+            self._client.table("users")
+            .select("phone, push_name, level, focus, created_at")
+            .order("created_at", desc=True)
+            .execute()
+        )
+
+        users = []
+        for row in result.data:
+            phone = row["phone"]
+            # Buscar stats do historico
+            stats_result = await (
+                self._client.rpc(
+                    "get_user_lifetime_stats",
+                    {"user_phone": phone},
+                )
+                .execute()
+            )
+            stats = stats_result.data[0] if stats_result.data else {}
+            users.append({
+                "phone": phone,
+                "push_name": row.get("push_name", ""),
+                "level": row.get("level", "intermediate"),
+                "focus": row.get("focus", "general"),
+                "total_attempts": stats.get("total", 0),
+                "avg_score": stats.get("avg_score", 0),
+                "best_score": stats.get("best_score", 0),
+                "created_at": row.get("created_at"),
+            })
+
+        return users
+
 
 # Inicializado no lifespan do FastAPI
 session_manager: Optional[SessionManager] = None

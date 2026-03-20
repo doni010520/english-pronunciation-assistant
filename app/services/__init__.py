@@ -3,6 +3,8 @@ from app.services.azure_speech import AzureSpeechService
 from app.services.error_analyzer import BrazilianErrorAnalyzer
 from app.services.feedback_generator import FeedbackGenerator
 from app.services.session_manager import SessionManager
+from app.services.rag import RAGService
+from app.services.agent import ConversationalAgent
 
 __all__ = [
     "UazapiService",
@@ -11,4 +13,6 @@ __all__ = [
     "BrazilianErrorAnalyzer",
     "FeedbackGenerator",
     "SessionManager",
+    "RAGService",
+    "ConversationalAgent",
 ]

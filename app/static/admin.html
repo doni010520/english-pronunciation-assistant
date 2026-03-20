@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>English Pronunciation Assistant - Admin</title>
+<style>
+  :root {
+    --bg: #0f172a; --surface: #1e293b; --border: #334155;
+    --text: #e2e8f0; --muted: #94a3b8; --primary: #3b82f6;
+    --primary-hover: #2563eb; --danger: #ef4444; --success: #22c55e;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+  .container { max-width: 900px; margin: 0 auto; padding: 20px; }
+
+  /* Header */
+  header { display: flex; justify-content: space-between; align-items: center; padding: 16px 0; border-bottom: 1px solid var(--border); margin-bottom: 24px; }
+  header h1 { font-size: 1.4rem; }
+  header h1 span { color: var(--primary); }
+  .btn-logout { background: none; border: 1px solid var(--border); color: var(--muted); padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; }
+  .btn-logout:hover { border-color: var(--danger); color: var(--danger); }
+
+  /* Login */
+  #login-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 60vh; gap: 16px; }
+  #login-screen h2 { color: var(--primary); }
+  #login-screen input { background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 10px 16px; border-radius: 8px; width: 300px; font-size: 1rem; }
+  #login-screen button { background: var(--primary); color: white; border: none; padding: 10px 32px; border-radius: 8px; cursor: pointer; font-size: 1rem; }
+  #login-screen button:hover { background: var(--primary-hover); }
+  #login-error { color: var(--danger); font-size: 0.85rem; display: none; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 4px; margin-bottom: 20px; }
+  .tab { background: var(--surface); border: 1px solid var(--border); color: var(--muted); padding: 8px 20px; border-radius: 8px 8px 0 0; cursor: pointer; font-size: 0.9rem; }
+  .tab.active { background: var(--border); color: var(--text); border-bottom-color: var(--border); }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* Forms */
+  label { display: block; color: var(--muted); font-size: 0.85rem; margin-bottom: 4px; margin-top: 14px; }
+  input[type="text"], textarea { width: 100%; background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 10px; border-radius: 6px; font-size: 0.95rem; font-family: inherit; }
+  textarea { min-height: 200px; resize: vertical; }
+  .btn { background: var(--primary); color: white; border: none; padding: 10px 24px; border-radius: 6px; cursor: pointer; font-size: 0.9rem; margin-top: 16px; }
+  .btn:hover { background: var(--primary-hover); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-danger { background: var(--danger); }
+  .btn-danger:hover { background: #dc2626; }
+  .msg { padding: 8px 12px; border-radius: 6px; margin-top: 12px; font-size: 0.85rem; display: none; }
+  .msg.success { display: block; background: #052e16; color: var(--success); border: 1px solid #166534; }
+  .msg.error { display: block; background: #450a0a; color: var(--danger); border: 1px solid #991b1b; }
+
+  /* Upload */
+  .upload-row { display: flex; gap: 10px; align-items: end; margin-top: 16px; }
+  .upload-row input[type="file"] { flex: 1; }
+
+  /* Table */
+  table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+  th { color: var(--muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; }
+  tr:hover { background: var(--surface); }
+
+  .empty { color: var(--muted); text-align: center; padding: 40px; }
+  .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin 0.6s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- LOGIN -->
+  <div id="login-screen">
+    <h2>Admin Panel</h2>
+    <p style="color:var(--muted)">English Pronunciation Assistant</p>
+    <input type="password" id="token-input" placeholder="Admin Token" onkeydown="if(event.key==='Enter')doLogin()">
+    <button onclick="doLogin()">Entrar</button>
+    <div id="login-error">Token invalido</div>
+  </div>
+
+  <!-- MAIN -->
+  <div id="main-screen" style="display:none">
+    <header>
+      <h1><span>EPA</span> Admin</h1>
+      <button class="btn-logout" onclick="doLogout()">Sair</button>
+    </header>
+
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('settings')">Settings</div>
+      <div class="tab" onclick="switchTab('documents')">Documents</div>
+      <div class="tab" onclick="switchTab('users')">Users</div>
+    </div>
+
+    <!-- SETTINGS TAB -->
+    <div id="tab-settings" class="tab-content active">
+      <label for="agent_name">Agent Name</label>
+      <input type="text" id="agent_name">
+
+      <label for="personality">Personality</label>
+      <input type="text" id="personality">
+
+      <label for="system_prompt">System Prompt</label>
+      <textarea id="system_prompt"></textarea>
+
+      <button class="btn" onclick="saveSettings()">Salvar Settings</button>
+      <div id="settings-msg" class="msg"></div>
+    </div>
+
+    <!-- DOCUMENTS TAB -->
+    <div id="tab-documents" class="tab-content">
+      <h3 style="margin-bottom:4px">Knowledge Base (RAG)</h3>
+      <p style="color:var(--muted);font-size:0.85rem">Upload PDF, TXT ou DOCX com conteudo para o agente usar.</p>
+
+      <div class="upload-row">
+        <input type="file" id="file-upload" accept=".pdf,.txt,.docx">
+        <button class="btn" onclick="uploadDoc()" id="btn-upload">Upload</button>
+      </div>
+      <div id="upload-msg" class="msg"></div>
+
+      <table>
+        <thead><tr><th>Arquivo</th><th>Tipo</th><th>Chunks</th><th>Data</th><th></th></tr></thead>
+        <tbody id="docs-table"></tbody>
+      </table>
+      <div id="docs-empty" class="empty" style="display:none">Nenhum documento uploaded.</div>
+    </div>
+
+    <!-- USERS TAB -->
+    <div id="tab-users" class="tab-content">
+      <h3 style="margin-bottom:8px">Alunos</h3>
+      <table>
+        <thead><tr><th>Telefone</th><th>Nome</th><th>Tentativas</th><th>Media</th><th>Melhor</th></tr></thead>
+        <tbody id="users-table"></tbody>
+      </table>
+      <div id="users-empty" class="empty" style="display:none">Nenhum aluno ainda.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = window.location.origin;
+let TOKEN = localStorage.getItem('admin_token') || '';
+
+// ---- Auth ----
+async function doLogin() {
+  TOKEN = document.getElementById('token-input').value;
+  try {
+    const r = await apiFetch('/api/admin/settings');
+    if (r.ok) {
+      localStorage.setItem('admin_token', TOKEN);
+      showMain();
+    } else {
+      document.getElementById('login-error').style.display = 'block';
+    }
+  } catch { document.getElementById('login-error').style.display = 'block'; }
+}
+function doLogout() { localStorage.removeItem('admin_token'); TOKEN = ''; location.reload(); }
+
+function apiFetch(path, opts = {}) {
+  opts.headers = { ...opts.headers, 'Authorization': 'Bearer ' + TOKEN };
+  return fetch(API + path, opts);
+}
+
+// ---- Init ----
+if (TOKEN) {
+  apiFetch('/api/admin/settings').then(r => {
+    if (r.ok) showMain(); else { localStorage.removeItem('admin_token'); TOKEN = ''; }
+  }).catch(() => {});
+}
+
+function showMain() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('main-screen').style.display = 'block';
+  loadSettings();
+  loadDocs();
+  loadUsers();
+}
+
+// ---- Tabs ----
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t, i) => {
+    const tabs = ['settings','documents','users'];
+    t.classList.toggle('active', tabs[i] === name);
+  });
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  if (name === 'documents') loadDocs();
+  if (name === 'users') loadUsers();
+}
+
+// ---- Settings ----
+async function loadSettings() {
+  const r = await apiFetch('/api/admin/settings');
+  if (!r.ok) return;
+  const d = await r.json();
+  document.getElementById('agent_name').value = d.agent_name || '';
+  document.getElementById('personality').value = d.personality || '';
+  document.getElementById('system_prompt').value = d.system_prompt || '';
+}
+
+async function saveSettings() {
+  const body = {
+    agent_name: document.getElementById('agent_name').value,
+    personality: document.getElementById('personality').value,
+    system_prompt: document.getElementById('system_prompt').value,
+  };
+  const r = await apiFetch('/api/admin/settings', {
+    method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body)
+  });
+  const msg = document.getElementById('settings-msg');
+  if (r.ok) { msg.className = 'msg success'; msg.textContent = 'Salvo com sucesso!'; }
+  else { msg.className = 'msg error'; msg.textContent = 'Erro ao salvar'; }
+  setTimeout(() => msg.className = 'msg', 3000);
+}
+
+// ---- Documents ----
+async function loadDocs() {
+  const r = await apiFetch('/api/admin/documents');
+  if (!r.ok) return;
+  const docs = await r.json();
+  const tbody = document.getElementById('docs-table');
+  const empty = document.getElementById('docs-empty');
+  if (!docs.length) { tbody.innerHTML = ''; empty.style.display = 'block'; return; }
+  empty.style.display = 'none';
+  tbody.innerHTML = docs.map(d => `<tr>
+    <td>${esc(d.filename)}</td><td>${esc(d.filetype)}</td><td>${d.chunk_count}</td>
+    <td>${new Date(d.uploaded_at).toLocaleDateString('pt-BR')}</td>
+    <td><button class="btn btn-danger" style="padding:4px 10px;margin:0;font-size:0.8rem" onclick="deleteDoc('${d.id}')">Deletar</button></td>
+  </tr>`).join('');
+}
+
+async function uploadDoc() {
+  const input = document.getElementById('file-upload');
+  const msg = document.getElementById('upload-msg');
+  const btn = document.getElementById('btn-upload');
+  if (!input.files.length) return;
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
+  const fd = new FormData(); fd.append('file', input.files[0]);
+  try {
+    const r = await apiFetch('/api/admin/documents', { method: 'POST', body: fd });
+    if (r.ok) { msg.className = 'msg success'; msg.textContent = 'Documento processado!'; loadDocs(); input.value = ''; }
+    else { const e = await r.json(); msg.className = 'msg error'; msg.textContent = e.detail || 'Erro no upload'; }
+  } catch(e) { msg.className = 'msg error'; msg.textContent = 'Erro de conexao'; }
+  btn.disabled = false; btn.textContent = 'Upload';
+  setTimeout(() => msg.className = 'msg', 4000);
+}
+
+async function deleteDoc(id) {
+  if (!confirm('Deletar este documento e todos os chunks?')) return;
+  await apiFetch('/api/admin/documents/' + id, { method: 'DELETE' });
+  loadDocs();
+}
+
+// ---- Users ----
+async function loadUsers() {
+  const r = await apiFetch('/api/admin/users');
+  if (!r.ok) return;
+  const users = await r.json();
+  const tbody = document.getElementById('users-table');
+  const empty = document.getElementById('users-empty');
+  if (!users.length) { tbody.innerHTML = ''; empty.style.display = 'block'; return; }
+  empty.style.display = 'none';
+  tbody.innerHTML = users.map(u => `<tr>
+    <td>${esc(u.phone)}</td><td>${esc(u.push_name || '-')}</td>
+    <td>${u.total_attempts || 0}</td><td>${u.avg_score ? u.avg_score.toFixed(0) : '-'}</td>
+    <td>${u.best_score ? u.best_score.toFixed(0) : '-'}</td>
+  </tr>`).join('');
+}
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+</script>
+</body>
+</html>
