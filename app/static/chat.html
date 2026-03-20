@@ -194,11 +194,11 @@ const API_BASE = window.location.origin;
 const sessionId = 'web_' + Math.random().toString(36).slice(2, 10);
 
 // Avatar model URLs (tries in order, first success wins)
+// Source: met4citizen/TalkingHead project (CC0 / free avatars with ARKit + Oculus visemes)
 const AVATAR_URLS = [
-  // Ready Player Me default avatar with Oculus Visemes (full body)
-  'https://models.readyplayer.me/64bfa15f0e72c63d7c3934a6.glb?morphTargets=ARKit,Oculus+Visemes&textureAtlas=none',
-  // Fallback: Three.js facecap example model (face only, reliable CDN)
-  'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r170/examples/models/gltf/facecap.glb',
+  'https://cdn.jsdelivr.net/gh/met4citizen/TalkingHead@main/avatars/brunette.glb',
+  'https://cdn.jsdelivr.net/gh/met4citizen/TalkingHead@main/avatars/avaturn.glb',
+  'https://cdn.jsdelivr.net/gh/met4citizen/TalkingHead@main/avatars/mpfb.glb',
 ];
 
 // DOM
