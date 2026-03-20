@@ -1,12 +1,11 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
 from fastapi.responses import JSONResponse
 from supabase import acreate_client
 
 from app.config import get_settings
-from app.models import UazapiWebhook
 from app.services import (
     UazapiService,
     AzureSpeechService,
@@ -313,69 +312,79 @@ async def process_audio_message(phone: str, message_id: str, push_name: str = No
 # ============================================
 
 @app.post("/webhook/uazapi")
-async def webhook_uazapi(payload: UazapiWebhook, background_tasks: BackgroundTasks):
+async def webhook_uazapi(request: Request, background_tasks: BackgroundTasks):
     """
     Webhook principal que recebe mensagens da Uazapi
+    Aceita qualquer payload JSON para compatibilidade
     """
     try:
-        # Filtrar eventos
-        if payload.event != "messages":
-            return JSONResponse({"status": "ignored", "reason": "not a message event"})
-        
-        if not payload.message:
-            return JSONResponse({"status": "ignored", "reason": "no message"})
-        
-        message = payload.message
-        
+        payload = await request.json()
+        logger.info(f"📨 Webhook recebido: {payload}")
+
+        # Filtrar eventos - aceitar variações
+        event = payload.get("event", "")
+        if event not in ["messages", "messages.upsert"]:
+            return JSONResponse({"status": "ignored", "reason": f"event: {event}"})
+
+        # Extrair mensagem - tentar diferentes estruturas da Uazapi
+        message = payload.get("message") or payload.get("data", {})
+
+        if not message:
+            return JSONResponse({"status": "ignored", "reason": "no message data"})
+
+        # Extrair key - pode estar em message.key ou direto no message
+        key = message.get("key", {})
+
         # Ignorar mensagens enviadas por nós
-        if message.key.fromMe:
+        if key.get("fromMe", False):
             return JSONResponse({"status": "ignored", "reason": "from me"})
-        
+
         # Extrair dados
-        phone = extract_phone_from_jid(message.key.remoteJid)
-        message_id = message.key.id
-        push_name = message.pushName or "Aluno"
-        
-        logger.info(f"📨 Mensagem recebida de {phone} ({push_name})")
-        
-        # Determinar tipo de mensagem
-        if message.audioMessage:
-            # Processar em background para responder rápido ao webhook
+        remote_jid = key.get("remoteJid", "")
+        if not remote_jid:
+            return JSONResponse({"status": "ignored", "reason": "no remoteJid"})
+
+        phone = extract_phone_from_jid(remote_jid)
+        message_id = key.get("id", "")
+        push_name = message.get("pushName", "Aluno")
+
+        logger.info(f"📨 Mensagem de {phone} ({push_name})")
+
+        # Extrair conteúdo da mensagem
+        msg_content = message.get("message", message)
+
+        # Verificar tipo de mensagem
+        if msg_content.get("audioMessage"):
             background_tasks.add_task(
-                process_audio_message, 
-                phone, 
+                process_audio_message,
+                phone,
                 message_id,
                 push_name
             )
             return JSONResponse({"status": "processing", "type": "audio"})
-        
-        elif message.conversation:
-            # Mensagem de texto simples
+
+        # Texto - tentar várias formas
+        text = (
+            msg_content.get("conversation")
+            or msg_content.get("extendedTextMessage", {}).get("text")
+            or message.get("conversation")
+            or ""
+        )
+
+        if text:
             background_tasks.add_task(
                 process_text_message,
                 phone,
-                message.conversation,
+                text,
                 message_id
             )
             return JSONResponse({"status": "processing", "type": "text"})
-        
-        elif message.extendedTextMessage:
-            # Mensagem de texto com formatação
-            text = message.extendedTextMessage.get("text", "")
-            if text:
-                background_tasks.add_task(
-                    process_text_message,
-                    phone,
-                    text,
-                    message_id
-                )
-                return JSONResponse({"status": "processing", "type": "extended_text"})
-        
+
+        logger.info(f"⚠️ Tipo de mensagem não suportado: {list(msg_content.keys())}")
         return JSONResponse({"status": "ignored", "reason": "unsupported message type"})
-        
+
     except Exception as e:
         logger.error(f"❌ Erro no webhook: {str(e)}", exc_info=True)
-        # Não retornar erro para a Uazapi não reenviar
         return JSONResponse({"status": "error", "message": str(e)})
 
 
