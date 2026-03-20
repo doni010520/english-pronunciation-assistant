@@ -191,9 +191,13 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 const API_BASE = window.location.origin;
 const sessionId = 'web_' + Math.random().toString(36).slice(2, 10);
 
-// Ready Player Me avatar — half-body with morph targets
-// You can replace this URL with any RPM avatar GLB
-const AVATAR_URL = 'https://models.readyplayer.me/64bfa15f0e72c63d7c3934a6.glb?morphTargets=ARKit,Oculus%20Visemes&textureAtlas=none';
+// Avatar model URLs (tries in order, first success wins)
+const AVATAR_URLS = [
+  // Ready Player Me default avatar with Oculus Visemes (full body)
+  'https://models.readyplayer.me/64bfa15f0e72c63d7c3934a6.glb?morphTargets=ARKit,Oculus+Visemes&textureAtlas=none',
+  // Fallback: Three.js facecap example model (face only, reliable CDN)
+  'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r170/examples/models/gltf/facecap.glb',
+];
 
 // DOM
 const canvas = document.getElementById('avatarCanvas');
@@ -218,8 +222,8 @@ renderer.toneMappingExposure = 1.2;
 
 const scene = new THREE.Scene();
 
-const camera = new THREE.PerspectiveCamera(28, canvas.clientWidth / canvas.clientHeight, 0.1, 100);
-camera.position.set(0, 1.55, 0.8);
+const camera = new THREE.PerspectiveCamera(30, canvas.clientWidth / canvas.clientHeight, 0.01, 100);
+camera.position.set(0, 0, 0.55);
 
 // Lights
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
@@ -239,7 +243,7 @@ scene.add(rimLight);
 
 // Controls (limited)
 const controls = new OrbitControls(camera, canvas);
-controls.target.set(0, 1.5, 0);
+controls.target.set(0, 0, 0);
 controls.enablePan = false;
 controls.enableZoom = false;
 controls.minPolarAngle = Math.PI / 3;
@@ -261,42 +265,78 @@ const VISEME_NAMES = [
 ];
 
 const loader = new GLTFLoader();
-loader.load(
-  AVATAR_URL,
-  (gltf) => {
-    const model = gltf.scene;
-    scene.add(model);
 
-    // Find the head mesh with morph targets
-    model.traverse((child) => {
-      if (child.isMesh && child.morphTargetDictionary) {
-        const dict = child.morphTargetDictionary;
-        // Check if this mesh has visemes
-        if ('viseme_aa' in dict || 'mouthOpen' in dict) {
-          headMesh = child;
-          // Map morph target names to indices
-          for (const [name, index] of Object.entries(dict)) {
-            morphTargetMap[name] = index;
-          }
-          console.log('Head mesh found:', Object.keys(dict).length, 'morph targets');
-        }
-      }
-    });
-
-    loadingOverlay.classList.add('hidden');
-    console.log('Avatar loaded!');
-  },
-  (progress) => {
-    if (progress.total) {
-      const pct = Math.round((progress.loaded / progress.total) * 100);
-      loadingOverlay.querySelector('.loading-text').textContent = `Loading avatar... ${pct}%`;
-    }
-  },
-  (error) => {
-    console.error('Avatar load error:', error);
-    loadingOverlay.querySelector('.loading-text').textContent = 'Failed to load avatar';
+function loadAvatar(urls, index = 0) {
+  if (index >= urls.length) {
+    loadingOverlay.querySelector('.loading-text').textContent = 'Could not load avatar';
+    return;
   }
-);
+  const url = urls[index];
+  console.log(`Trying avatar URL ${index + 1}/${urls.length}:`, url);
+
+  loader.load(
+    url,
+    (gltf) => {
+      const model = gltf.scene;
+
+      // Find mesh with morph targets
+      model.traverse((child) => {
+        if (child.isMesh && child.morphTargetDictionary) {
+          const dict = child.morphTargetDictionary;
+          if (!headMesh || Object.keys(dict).length > Object.keys(morphTargetMap).length) {
+            headMesh = child;
+            for (const [name, idx] of Object.entries(dict)) {
+              morphTargetMap[name] = idx;
+            }
+          }
+        }
+      });
+
+      // Auto-frame: detect model type and position camera accordingly
+      const box = new THREE.Box3().setFromObject(model);
+      const size = box.getSize(new THREE.Vector3());
+      const center = box.getCenter(new THREE.Vector3());
+      const isFullBody = size.y > 0.5; // full body models are tall
+
+      if (isFullBody) {
+        // Full body: frame upper body/head area
+        model.position.set(-center.x, -box.min.y, -center.z);
+        scene.add(model);
+        const headY = size.y * 0.85;
+        controls.target.set(0, headY, 0);
+        camera.position.set(0, headY, 0.65);
+      } else {
+        // Face only: center and scale
+        const targetHeight = 0.35;
+        const scale = targetHeight / size.y;
+        model.scale.setScalar(scale);
+        const scaledBox = new THREE.Box3().setFromObject(model);
+        const scaledCenter = scaledBox.getCenter(new THREE.Vector3());
+        model.position.sub(scaledCenter);
+        model.position.y += 0.02;
+        scene.add(model);
+        controls.target.set(0, 0, 0);
+        camera.position.set(0, 0, 0.55);
+      }
+      controls.update();
+
+      console.log('Avatar loaded! Morph targets:', Object.keys(morphTargetMap).length);
+      loadingOverlay.classList.add('hidden');
+    },
+    (progress) => {
+      if (progress.total) {
+        const pct = Math.round((progress.loaded / progress.total) * 100);
+        loadingOverlay.querySelector('.loading-text').textContent = `Loading avatar... ${pct}%`;
+      }
+    },
+    (error) => {
+      console.warn(`Avatar URL ${index + 1} failed:`, error.message || error);
+      loadAvatar(urls, index + 1); // try next URL
+    }
+  );
+}
+
+loadAvatar(AVATAR_URLS);
 
 // ============ MORPH TARGET ANIMATION ============
 let currentVisemes = {};
