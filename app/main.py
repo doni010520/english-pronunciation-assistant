@@ -1,11 +1,12 @@
 import asyncio
+import json as json_mod
 import logging
 import os
+import uuid
 from contextlib import asynccontextmanager
-from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
+import redis.asyncio as aioredis
 from fastapi import FastAPI, Request, Header, HTTPException, UploadFile, File
 from fastapi.responses import JSONResponse, HTMLResponse, FileResponse
 from openai import AsyncOpenAI
@@ -47,11 +48,12 @@ feedback_generator: FeedbackGenerator = None
 agent: ConversationalAgent = None
 rag_service: RAGService = None
 openai_client: AsyncOpenAI = None
+redis_client: aioredis.Redis = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global uazapi_service, azure_service, error_analyzer, feedback_generator, agent, rag_service, openai_client
+    global uazapi_service, azure_service, error_analyzer, feedback_generator, agent, rag_service, openai_client, redis_client
 
     logger.info("Inicializando servicos...")
     settings = get_settings()
@@ -61,7 +63,11 @@ async def lifespan(app: FastAPI):
     sm.session_manager = SessionManager(supabase_client)
 
     # OpenAI client compartilhado
-    openai_client = AsyncOpenAI(api_key=settings.openai_api_key)  # noqa: F841 — used as global
+    openai_client = AsyncOpenAI(api_key=settings.openai_api_key)
+
+    # Redis
+    redis_client = aioredis.from_url(settings.redis_url, decode_responses=False)
+    logger.info("Redis conectado!")
 
     # Serviços existentes
     uazapi_service = UazapiService()
@@ -76,6 +82,8 @@ async def lifespan(app: FastAPI):
     logger.info("Servicos inicializados!")
     yield
     logger.info("Encerrando aplicacao...")
+    if redis_client:
+        await redis_client.close()
 
 
 # ============================================
@@ -102,103 +110,123 @@ async def verify_admin(authorization: str = Header(None)):
 
 
 # ============================================
-# MESSAGE BUFFER (debounce)
+# MESSAGE BUFFER (Redis + debounce)
 # ============================================
 
-BUFFER_DELAY_SECONDS = 10  # esperar 10s de silêncio antes de processar
+BUFFER_DELAY_SECONDS = 10
+BUFFER_KEY = "buf:{phone}"        # lista de mensagens serializadas
+LAST_MSG_KEY = "last:{phone}"     # id da última mensagem (para debounce)
+BUFFER_TTL = 120                  # expira em 2 min (safety net)
 
 
-@dataclass
-class BufferedMessage:
-    """Uma mensagem no buffer."""
-    msg_type: str  # "text", "audio", "image"
-    text: Optional[str] = None
-    message_id: Optional[str] = None
-    audio_bytes: Optional[bytes] = None
-    audio_mimetype: Optional[str] = None
-    image_bytes: Optional[bytes] = None
-    image_mimetype: Optional[str] = None
+import base64 as b64mod
 
 
-@dataclass
-class UserBuffer:
-    """Buffer de mensagens de um usuário."""
-    messages: list = field(default_factory=list)
-    timer_task: Optional[asyncio.Task] = None
-    push_name: str = "Aluno"
+def _serialize_msg(msg: dict) -> bytes:
+    """Serializa uma mensagem para armazenar no Redis."""
+    # Audio/image bytes vão como base64 dentro do JSON
+    data = dict(msg)
+    if data.get("audio_bytes"):
+        data["audio_bytes"] = b64mod.b64encode(data["audio_bytes"]).decode("ascii")
+    if data.get("image_bytes"):
+        data["image_bytes"] = b64mod.b64encode(data["image_bytes"]).decode("ascii")
+    return json_mod.dumps(data).encode("utf-8")
 
 
-# phone → UserBuffer
-message_buffers: dict[str, UserBuffer] = {}
-buffer_lock = asyncio.Lock()
+def _deserialize_msg(raw: bytes) -> dict:
+    """Deserializa uma mensagem do Redis."""
+    data = json_mod.loads(raw)
+    if data.get("audio_bytes"):
+        data["audio_bytes"] = b64mod.b64decode(data["audio_bytes"])
+    if data.get("image_bytes"):
+        data["image_bytes"] = b64mod.b64decode(data["image_bytes"])
+    return data
 
 
-async def _add_to_buffer(phone: str, msg: BufferedMessage, push_name: str):
-    """Adiciona mensagem ao buffer e reinicia o timer."""
-    async with buffer_lock:
-        if phone not in message_buffers:
-            message_buffers[phone] = UserBuffer()
+async def _buffer_message(phone: str, msg: dict, push_name: str):
+    """Salva mensagem no Redis, marca como última, e agenda processamento."""
+    buf_key = BUFFER_KEY.format(phone=phone)
+    last_key = LAST_MSG_KEY.format(phone=phone)
 
-        buf = message_buffers[phone]
-        buf.messages.append(msg)
-        buf.push_name = push_name
+    # ID único para esta mensagem
+    msg_uid = uuid.uuid4().hex
 
-        # Cancelar timer anterior
-        if buf.timer_task and not buf.timer_task.done():
-            buf.timer_task.cancel()
+    # Salvar push_name na mensagem
+    msg["push_name"] = push_name
 
-        # Iniciar novo timer
-        buf.timer_task = asyncio.create_task(_buffer_timer(phone))
+    # Adicionar ao buffer e marcar como última
+    pipe = redis_client.pipeline()
+    pipe.rpush(buf_key, _serialize_msg(msg))
+    pipe.set(last_key, msg_uid, ex=BUFFER_TTL)
+    pipe.expire(buf_key, BUFFER_TTL)
+    await pipe.execute()
+
+    # Esperar e comparar — se ainda for a última, processar
+    asyncio.create_task(_wait_and_process(phone, msg_uid))
 
 
-async def _buffer_timer(phone: str):
-    """Espera o delay e dispara o processamento."""
-    try:
-        await asyncio.sleep(BUFFER_DELAY_SECONDS)
-        await _flush_buffer(phone)
-    except asyncio.CancelledError:
-        pass  # timer cancelado porque chegou nova mensagem
+async def _wait_and_process(phone: str, my_uid: str):
+    """Espera o delay, verifica se é a última msg, e processa."""
+    await asyncio.sleep(BUFFER_DELAY_SECONDS)
+
+    last_key = LAST_MSG_KEY.format(phone=phone)
+    current_uid = await redis_client.get(last_key)
+
+    # Se outra mensagem chegou depois, não somos os últimos — sair
+    if current_uid != my_uid.encode("utf-8"):
+        return
+
+    # Somos a última mensagem — flush
+    await _flush_buffer(phone)
 
 
 async def _flush_buffer(phone: str):
-    """Processa todas as mensagens acumuladas do usuário."""
-    async with buffer_lock:
-        buf = message_buffers.pop(phone, None)
+    """Coleta todas as mensagens do Redis e processa."""
+    buf_key = BUFFER_KEY.format(phone=phone)
+    last_key = LAST_MSG_KEY.format(phone=phone)
 
-    if not buf or not buf.messages:
+    # Pegar todas as mensagens e limpar atomicamente
+    pipe = redis_client.pipeline()
+    pipe.lrange(buf_key, 0, -1)
+    pipe.delete(buf_key)
+    pipe.delete(last_key)
+    results = await pipe.execute()
+
+    raw_messages = results[0]
+    if not raw_messages:
         return
 
-    push_name = buf.push_name
-    messages = buf.messages
+    messages = [_deserialize_msg(raw) for raw in raw_messages]
+    push_name = messages[-1].get("push_name", "Aluno")
+
+    logger.info(f"Buffer flush: {phone}, {len(messages)} mensagem(ns)")
 
     try:
         await uazapi_service.send_presence(phone, "composing")
 
-        # Coletar textos e dados de pronúncia de todas as mensagens
         text_parts = []
         pronunciation_notes = []
         has_audio = False
         last_message_id = None
 
         for msg in messages:
-            if msg.message_id:
-                last_message_id = msg.message_id
+            if msg.get("message_id"):
+                last_message_id = msg["message_id"]
 
-            if msg.msg_type == "text" and msg.text:
-                text_parts.append(msg.text)
+            if msg["msg_type"] == "text" and msg.get("text"):
+                text_parts.append(msg["text"])
 
-            elif msg.msg_type == "audio" and msg.audio_bytes:
+            elif msg["msg_type"] == "audio" and msg.get("audio_bytes"):
                 has_audio = True
-                # Transcrever
-                transcription = await _transcribe_audio(msg.audio_bytes, msg.audio_mimetype)
+                transcription = await _transcribe_audio(msg["audio_bytes"], msg["audio_mimetype"])
                 if transcription:
                     text_parts.append(transcription)
 
                     # Avaliação de pronúncia nos bastidores
                     try:
-                        fmt = "ogg" if "ogg" in msg.audio_mimetype else "mp3" if "mp3" in msg.audio_mimetype else "ogg"
+                        fmt = "ogg" if "ogg" in msg["audio_mimetype"] else "mp3" if "mp3" in msg["audio_mimetype"] else "ogg"
                         pron_result = await azure_service.assess_pronunciation(
-                            audio_bytes=msg.audio_bytes,
+                            audio_bytes=msg["audio_bytes"],
                             reference_text=transcription,
                             audio_format=fmt,
                         )
@@ -213,7 +241,7 @@ async def _flush_buffer(phone: str):
                                 for e in gross_errors[:3]
                             )
                             pronunciation_notes.append(
-                                f"Gross pronunciation errors in this audio: {errors_text}."
+                                f"Gross pronunciation errors: {errors_text}."
                             )
                         try:
                             await sm.session_manager.update_session(phone, pron_result.overall_score)
@@ -222,14 +250,13 @@ async def _flush_buffer(phone: str):
                     except Exception as e:
                         logger.warning(f"Pronúncia falhou: {e}")
 
-            elif msg.msg_type == "image":
-                # Extrair texto da imagem
+            elif msg["msg_type"] == "image":
                 try:
                     extracted = await feedback_generator.extract_text_from_image(
-                        msg.image_bytes, msg.image_mimetype
+                        msg["image_bytes"], msg["image_mimetype"]
                     )
                     if extracted:
-                        text_parts.append(f"[Sent an image with this English text: \"{extracted}\"]")
+                        text_parts.append(f'[Sent an image with this English text: "{extracted}"]')
                         await sm.session_manager.create_session(phone, extracted)
                     else:
                         text_parts.append("[Sent an image but no English text was found in it]")
@@ -239,19 +266,17 @@ async def _flush_buffer(phone: str):
         if not text_parts:
             return
 
-        # Montar mensagem combinada para o agente
+        # Montar mensagem combinada
         combined = "\n".join(text_parts)
         if pronunciation_notes:
             combined += "\n[PRONUNCIATION DATA — invisible to student, for your reference only: "
             combined += " ".join(pronunciation_notes)
             combined += " If relevant, correct inline while conversing. Do NOT list errors or mention scores.]"
 
-        logger.info(f"Buffer processado ({len(messages)} msgs): {combined[:100]}...")
+        logger.info(f"Processando: {combined[:100]}...")
 
-        # Enviar pro agente
         reply = await agent.process_message(phone, combined, push_name)
 
-        # Responder: se veio áudio, responder em áudio. Se só texto, responder em texto.
         if has_audio:
             await _send_voice_parts(phone, reply)
         else:
@@ -262,9 +287,7 @@ async def _flush_buffer(phone: str):
     except Exception as e:
         logger.error(f"Erro ao processar buffer: {e}", exc_info=True)
         try:
-            await uazapi_service.send_text(
-                phone, "Desculpe, tive um problema. Tente novamente!"
-            )
+            await uazapi_service.send_text(phone, "Desculpe, tive um problema. Tente novamente!")
         except Exception:
             pass
 
@@ -362,9 +385,9 @@ async def webhook_uazapi(request: Request):
         if msg_type in ("Conversation", "ExtendedTextMessage"):
             text = message.get("text", "")
             if text:
-                await _add_to_buffer(
+                await _buffer_message(
                     phone,
-                    BufferedMessage(msg_type="text", text=text, message_id=message_id),
+                    {"msg_type": "text", "text": text, "message_id": message_id},
                     push_name,
                 )
                 return JSONResponse({"status": "buffered", "type": "text"})
@@ -373,14 +396,14 @@ async def webhook_uazapi(request: Request):
         if msg_type == "AudioMessage":
             try:
                 audio_bytes, mimetype = await uazapi_service.download_audio(full_message_id)
-                await _add_to_buffer(
+                await _buffer_message(
                     phone,
-                    BufferedMessage(
-                        msg_type="audio",
-                        message_id=full_message_id,
-                        audio_bytes=audio_bytes,
-                        audio_mimetype=mimetype,
-                    ),
+                    {
+                        "msg_type": "audio",
+                        "message_id": full_message_id,
+                        "audio_bytes": audio_bytes,
+                        "audio_mimetype": mimetype,
+                    },
                     push_name,
                 )
                 return JSONResponse({"status": "buffered", "type": "audio"})
@@ -392,14 +415,14 @@ async def webhook_uazapi(request: Request):
         if msg_type == "ImageMessage":
             try:
                 image_bytes, mimetype = await uazapi_service.download_image(full_message_id)
-                await _add_to_buffer(
+                await _buffer_message(
                     phone,
-                    BufferedMessage(
-                        msg_type="image",
-                        message_id=full_message_id,
-                        image_bytes=image_bytes,
-                        image_mimetype=mimetype,
-                    ),
+                    {
+                        "msg_type": "image",
+                        "message_id": full_message_id,
+                        "image_bytes": image_bytes,
+                        "image_mimetype": mimetype,
+                    },
                     push_name,
                 )
                 return JSONResponse({"status": "buffered", "type": "image"})
