@@ -162,6 +162,20 @@ Requisitos:
             return None
         return extracted
 
+    async def text_to_speech(self, text: str, voice: str = "nova") -> bytes:
+        """
+        Converte texto em áudio usando OpenAI TTS.
+        Retorna bytes do MP3.
+        voice: alloy, echo, fable, onyx, nova, shimmer
+        """
+        response = await self.client.audio.speech.create(
+            model="tts-1",
+            voice=voice,
+            input=text,
+            response_format="mp3",
+        )
+        return response.content
+
     async def generate_encouragement(self, score: float, previous_score: float = None) -> str:
         """
         Gera mensagem de encorajamento baseada no progresso

@@ -101,17 +101,51 @@ async def verify_admin(authorization: str = Header(None)):
 # PROCESSAMENTO DE MENSAGENS
 # ============================================
 
+async def _send_voice_reply(phone: str, text: str, reply_to: str = None):
+    """Gera áudio TTS e envia como mensagem de voz."""
+    try:
+        audio_bytes = await feedback_generator.text_to_speech(text)
+        import base64
+        audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")
+        await uazapi_service.send_voice(phone, audio_b64, reply_to=reply_to)
+    except Exception as e:
+        logger.warning(f"⚠️ Falha ao enviar áudio TTS: {e}")
+
+
 async def process_text_message(phone: str, text: str, message_id: str, push_name: str = "Aluno"):
     """Processa mensagem de texto via agente conversacional."""
     try:
         await uazapi_service.send_presence(phone, "composing")
         reply = await agent.process_message(phone, text, push_name)
         await uazapi_service.send_text(phone, reply, reply_to=message_id)
+
+        # Se a resposta contém inglês (frase para praticar), enviar áudio também
+        if _has_english_phrase(reply):
+            await uazapi_service.send_presence(phone, "recording")
+            english_part = _extract_english_for_tts(reply)
+            await _send_voice_reply(phone, english_part)
+
     except Exception as e:
         logger.error(f"❌ Erro ao processar texto: {e}", exc_info=True)
         await uazapi_service.send_text(
             phone, "Desculpe, tive um problema. Tente novamente em alguns segundos!"
         )
+
+
+def _has_english_phrase(text: str) -> bool:
+    """Detecta se a resposta contém uma frase em inglês entre aspas (frase para praticar)."""
+    return '"' in text and any(c.isascii() and c.isalpha() for c in text)
+
+
+def _extract_english_for_tts(text: str) -> str:
+    """Extrai texto entre aspas para gerar áudio TTS."""
+    import re
+    # Buscar texto entre aspas (frase para praticar)
+    matches = re.findall(r'"([^"]+)"', text)
+    if matches:
+        # Pegar a frase mais longa entre aspas (provavelmente a frase de prática)
+        return max(matches, key=len)
+    return text
 
 
 async def process_audio_message(phone: str, message_id: str, push_name: str = "Aluno"):
@@ -197,6 +231,11 @@ async def process_audio_message(phone: str, message_id: str, push_name: str = "A
 
         full_response = f"{score_line}\n\n{reply}"
         await uazapi_service.send_text(phone, full_response, reply_to=message_id)
+
+        # Enviar feedback como áudio também
+        await uazapi_service.send_presence(phone, "recording")
+        await _send_voice_reply(phone, reply)
+
         logger.info(f"✅ Feedback enviado para {phone}")
 
     except Exception as e:

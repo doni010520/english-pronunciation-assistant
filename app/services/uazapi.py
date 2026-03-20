@@ -82,24 +82,50 @@ class UazapiService:
             return response.json()
     
     async def send_audio(
-        self, 
-        phone: str, 
+        self,
+        phone: str,
         audio_url: str,
         ptt: bool = True
     ) -> dict:
-        """Envia áudio (ptt = push to talk, aparece como gravação de voz)"""
+        """Envia áudio via URL (ptt = push to talk, aparece como gravação de voz)"""
         payload = {
             "number": phone,
             "type": "ptt" if ptt else "audio",
             "file": audio_url,
             "delay": 0
         }
-        
+
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
                 f"{self.base_url}/send/media",
                 headers=self.headers,
                 json=payload
+            )
+            response.raise_for_status()
+            return response.json()
+
+    async def send_voice(
+        self,
+        phone: str,
+        audio_base64: str,
+        reply_to: str = None,
+    ) -> dict:
+        """Envia áudio base64 como mensagem de voz (PTT)."""
+        import base64 as b64mod
+
+        payload = {
+            "number": phone,
+            "type": "ptt",
+            "file": f"data:audio/mp3;base64,{audio_base64}",
+        }
+        if reply_to:
+            payload["replyid"] = reply_to
+
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(
+                f"{self.base_url}/send/media",
+                headers=self.headers,
+                json=payload,
             )
             response.raise_for_status()
             return response.json()
