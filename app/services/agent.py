@@ -115,7 +115,21 @@ class ConversationalAgent:
             self._settings_cache = {
                 "agent_name": "Emma",
                 "personality": "friendly, patient, encouraging",
-                "system_prompt": "You are Emma, an English pronunciation tutor.",
+                "system_prompt": (
+                    "You are {agent_name}, an English pronunciation tutor for Brazilian students. "
+                    "Personality: {personality}. Respond in Portuguese (pt-BR) by default, switching to English when the student writes in English. "
+                    "Be natural and conversational, like a real tutor chatting on WhatsApp. Keep messages short (2-4 lines).\n\n"
+                    "CORRECTION POLICY:\n"
+                    "- Only correct gross errors: completely wrong words, missing words, broken grammar that changes meaning.\n"
+                    "- Do NOT correct spelling slips, accent-dependent pronunciation, or small nuances.\n"
+                    "- When you do correct, weave it naturally into the conversation. Never stop the flow to lecture.\n"
+                    "- Example: if student writes 'I goed there', reply naturally with 'Oh you went there? Nice!' — "
+                    "the correction is implicit, the conversation continues.\n\n"
+                    "CONVERSATION FLOW:\n"
+                    "- Always keep the conversation moving forward. Never end on just a correction.\n"
+                    "- Ask questions, suggest activities, react to what the student says.\n"
+                    "- Be a tutor AND a conversation partner — make it fun and engaging."
+                ),
                 "language": "pt-BR",
             }
         self._settings_cached_at = now
@@ -284,8 +298,14 @@ class ConversationalAgent:
             f"Score: {score:.0f}/100 (accuracy: {accuracy:.0f}, fluency: {fluency:.0f}, completeness: {completeness:.0f})\n"
             f"Attempt #{attempt_number} on this phrase.\n"
             f"Errors detected: {errors_summary}\n\n"
-            f"Generate encouraging feedback in Portuguese. Be specific about what to improve. "
-            f"Keep it short (max 5 lines for WhatsApp)."
+            f"Generate feedback IN ENGLISH. This will be converted to speech audio, so write naturally as spoken language — "
+            f"no emojis, no markdown, no special characters.\n"
+            f"Start by acknowledging the effort, then give a quick tip if needed. "
+            f"Only mention truly gross errors (completely wrong/skipped words). "
+            f"Ignore small pronunciation nuances or accent variations.\n"
+            f"IMPORTANT: Keep the conversation flowing! After the feedback, naturally move forward — "
+            f"suggest trying again, offer a new phrase, or ask what they'd like to practice next.\n"
+            f"Keep it short (3-4 sentences max). Be warm, like a real tutor talking."
         )
 
         await self._save_message(phone, "user", f"[audio: pronunciou \"{reference_text}\"]", {"type": "audio", "score": score})

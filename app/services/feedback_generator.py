@@ -169,7 +169,7 @@ Requisitos:
         voice: alloy, echo, fable, onyx, nova, shimmer
         """
         response = await self.client.audio.speech.create(
-            model="tts-1",
+            model="tts-1-hd",
             voice=voice,
             input=text,
             response_format="mp3",
