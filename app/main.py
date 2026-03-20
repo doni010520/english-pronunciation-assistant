@@ -97,6 +97,8 @@ Olá! Sou seu assistente de pronúncia de inglês.
 2️⃣ Grave um áudio pronunciando a frase
 3️⃣ Receba feedback detalhado sobre sua pronúncia
 
+📷 Você também pode enviar uma *foto com texto em inglês* (caderno, livro, tela) e eu crio uma sessão de prática a partir dele!
+
 *Comandos:*
 /phrase - Nova frase para praticar
 /progress - Ver seu progresso
@@ -204,6 +206,52 @@ _Dica: Fale devagar e claramente na primeira tentativa._"""
         phone,
         "🤔 Não entendi. Envie /help para ver os comandos ou /phrase para praticar!"
     )
+
+
+async def process_image_message(phone: str, message_id: str, push_name: str = None):
+    """Processa imagens - extrai texto em inglês e cria sessão de prática"""
+    try:
+        await uazapi_service.send_presence(phone, "composing")
+
+        logger.info(f"📷 Processando imagem de {phone}")
+
+        # 1. Baixar imagem
+        image_bytes, mimetype = await uazapi_service.download_image(message_id)
+        logger.info(f"✅ Imagem baixada: {len(image_bytes)} bytes, tipo: {mimetype}")
+
+        # 2. Extrair texto com GPT Vision
+        extracted_text = await feedback_generator.extract_text_from_image(image_bytes, mimetype)
+
+        if not extracted_text:
+            await uazapi_service.send_text(
+                phone,
+                "📷 Recebi sua imagem, mas não encontrei texto em inglês nela.\n\n"
+                "Tente enviar uma foto com texto em inglês escrito (caderno, livro, tela) "
+                "ou use /phrase para receber uma frase."
+            )
+            return
+
+        # 3. Criar sessão com o texto extraído
+        await sm.session_manager.create_session(phone, extracted_text)
+
+        message = f"""📷 *Texto encontrado na imagem:*
+
+"{extracted_text}"
+
+🎤 Agora grave um áudio pronunciando este texto!
+
+_Dica: Fale devagar e claramente na primeira tentativa._"""
+
+        await uazapi_service.send_text(phone, message)
+        logger.info(f"✅ Sessão criada a partir de imagem para {phone}: {extracted_text}")
+
+    except Exception as e:
+        logger.error(f"❌ Erro ao processar imagem: {str(e)}", exc_info=True)
+        await uazapi_service.send_text(
+            phone,
+            "😅 Ops! Tive um problema ao processar sua imagem.\n"
+            "Tente enviar novamente ou use /phrase para uma frase."
+        )
 
 
 async def process_audio_message(phone: str, message_id: str, push_name: str = None):
@@ -371,6 +419,16 @@ async def webhook_uazapi(request: Request, background_tasks: BackgroundTasks):
                 push_name
             )
             return JSONResponse({"status": "processing", "type": "audio"})
+
+        # Imagem
+        if msg_type == "ImageMessage":
+            background_tasks.add_task(
+                process_image_message,
+                phone,
+                full_message_id,
+                push_name
+            )
+            return JSONResponse({"status": "processing", "type": "image"})
 
         # Texto
         if msg_type in ["Conversation", "ExtendedTextMessage"]:

@@ -13,10 +13,11 @@ class UazapiService:
         self.token = settings.uazapi_token
         self.headers = {"token": self.token}
     
-    async def download_audio(self, message_id: str) -> tuple[bytes, str]:
+    async def download_media(self, message_id: str, generate_mp3: bool = False) -> tuple[bytes, str]:
         """
-        Baixa áudio de uma mensagem usando o endpoint /message/download
-        Retorna: (bytes do áudio, transcription se houver)
+        Baixa mídia de uma mensagem usando o endpoint /message/download.
+        Funciona para áudio, imagem, vídeo, documento.
+        Retorna: (bytes da mídia, mimetype)
         """
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
@@ -24,24 +25,37 @@ class UazapiService:
                 headers=self.headers,
                 json={
                     "id": message_id,
-                    "transcribe": False  # Não usar Whisper da Uazapi, vamos usar Azure
+                    "return_base64": True,
+                    "return_link": False,
+                    "generate_mp3": generate_mp3,
+                    "transcribe": False,
                 }
             )
             response.raise_for_status()
             data = response.json()
-            
-            # O áudio vem em base64 ou URL dependendo da config
-            if "base64" in data:
+
+            mimetype = data.get("mimetype", "application/octet-stream")
+
+            # Tentar base64 primeiro, depois URL
+            if data.get("base64Data"):
                 import base64
-                audio_bytes = base64.b64decode(data["base64"])
-            elif "url" in data:
-                # Baixa do URL
-                audio_response = await client.get(data["url"])
-                audio_bytes = audio_response.content
+                media_bytes = base64.b64decode(data["base64Data"])
+            elif data.get("fileURL"):
+                media_response = await client.get(data["fileURL"])
+                media_response.raise_for_status()
+                media_bytes = media_response.content
             else:
-                raise ValueError("Resposta da Uazapi não contém áudio")
-            
-            return audio_bytes, data.get("mimetype", "audio/ogg")
+                raise ValueError("Resposta da Uazapi não contém mídia")
+
+            return media_bytes, mimetype
+
+    async def download_audio(self, message_id: str) -> tuple[bytes, str]:
+        """Baixa áudio em OGG (formato nativo do WhatsApp)"""
+        return await self.download_media(message_id, generate_mp3=False)
+
+    async def download_image(self, message_id: str) -> tuple[bytes, str]:
+        """Baixa imagem de uma mensagem"""
+        return await self.download_media(message_id)
     
     async def send_text(
         self, 

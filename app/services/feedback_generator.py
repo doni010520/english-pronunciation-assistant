@@ -1,3 +1,5 @@
+import base64
+
 from openai import AsyncOpenAI
 
 from app.config import get_settings
@@ -9,6 +11,7 @@ class FeedbackGenerator:
         settings = get_settings()
         self.client = AsyncOpenAI(api_key=settings.openai_api_key)
         self.model = "gpt-4.1-mini"
+        self.vision_model = "gpt-4.1-mini"
     
     async def generate_feedback(
         self, 
@@ -114,6 +117,51 @@ Requisitos:
         
         return response.choices[0].message.content.strip()
     
+    async def extract_text_from_image(self, image_bytes: bytes, mimetype: str = "image/jpeg") -> str:
+        """
+        Usa GPT-4o vision para extrair texto em inglês de uma imagem.
+        Retorna o texto extraído ou None se não encontrar texto em inglês.
+        """
+        b64 = base64.b64encode(image_bytes).decode("utf-8")
+        media_type = mimetype.split(";")[0].strip()
+
+        response = await self.client.chat.completions.create(
+            model=self.vision_model,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a text extraction assistant for an English pronunciation practice app. "
+                        "Extract any English text visible in the image. Return ONLY the English text, "
+                        "nothing else. If there is no English text, respond with exactly: NO_ENGLISH_TEXT"
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:{media_type};base64,{b64}",
+                                "detail": "low",
+                            },
+                        },
+                        {
+                            "type": "text",
+                            "text": "Extract the English text from this image.",
+                        },
+                    ],
+                },
+            ],
+            max_tokens=200,
+            temperature=0.1,
+        )
+
+        extracted = response.choices[0].message.content.strip()
+        if extracted == "NO_ENGLISH_TEXT" or not extracted:
+            return None
+        return extracted
+
     async def generate_encouragement(self, score: float, previous_score: float = None) -> str:
         """
         Gera mensagem de encorajamento baseada no progresso
