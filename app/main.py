@@ -1,9 +1,12 @@
+import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Optional
 
-from fastapi import FastAPI, BackgroundTasks, Request, Header, HTTPException, UploadFile, File
+from fastapi import FastAPI, Request, Header, HTTPException, UploadFile, File
 from fastapi.responses import JSONResponse, HTMLResponse, FileResponse
 from openai import AsyncOpenAI
 from supabase import acreate_client
@@ -99,6 +102,174 @@ async def verify_admin(authorization: str = Header(None)):
 
 
 # ============================================
+# MESSAGE BUFFER (debounce)
+# ============================================
+
+BUFFER_DELAY_SECONDS = 4  # esperar 4s de silêncio antes de processar
+
+
+@dataclass
+class BufferedMessage:
+    """Uma mensagem no buffer."""
+    msg_type: str  # "text", "audio", "image"
+    text: Optional[str] = None
+    message_id: Optional[str] = None
+    audio_bytes: Optional[bytes] = None
+    audio_mimetype: Optional[str] = None
+    image_bytes: Optional[bytes] = None
+    image_mimetype: Optional[str] = None
+
+
+@dataclass
+class UserBuffer:
+    """Buffer de mensagens de um usuário."""
+    messages: list = field(default_factory=list)
+    timer_task: Optional[asyncio.Task] = None
+    push_name: str = "Aluno"
+
+
+# phone → UserBuffer
+message_buffers: dict[str, UserBuffer] = {}
+buffer_lock = asyncio.Lock()
+
+
+async def _add_to_buffer(phone: str, msg: BufferedMessage, push_name: str):
+    """Adiciona mensagem ao buffer e reinicia o timer."""
+    async with buffer_lock:
+        if phone not in message_buffers:
+            message_buffers[phone] = UserBuffer()
+
+        buf = message_buffers[phone]
+        buf.messages.append(msg)
+        buf.push_name = push_name
+
+        # Cancelar timer anterior
+        if buf.timer_task and not buf.timer_task.done():
+            buf.timer_task.cancel()
+
+        # Iniciar novo timer
+        buf.timer_task = asyncio.create_task(_buffer_timer(phone))
+
+
+async def _buffer_timer(phone: str):
+    """Espera o delay e dispara o processamento."""
+    try:
+        await asyncio.sleep(BUFFER_DELAY_SECONDS)
+        await _flush_buffer(phone)
+    except asyncio.CancelledError:
+        pass  # timer cancelado porque chegou nova mensagem
+
+
+async def _flush_buffer(phone: str):
+    """Processa todas as mensagens acumuladas do usuário."""
+    async with buffer_lock:
+        buf = message_buffers.pop(phone, None)
+
+    if not buf or not buf.messages:
+        return
+
+    push_name = buf.push_name
+    messages = buf.messages
+
+    try:
+        await uazapi_service.send_presence(phone, "composing")
+
+        # Coletar textos e dados de pronúncia de todas as mensagens
+        text_parts = []
+        pronunciation_notes = []
+        has_audio = False
+        last_message_id = None
+
+        for msg in messages:
+            if msg.message_id:
+                last_message_id = msg.message_id
+
+            if msg.msg_type == "text" and msg.text:
+                text_parts.append(msg.text)
+
+            elif msg.msg_type == "audio" and msg.audio_bytes:
+                has_audio = True
+                # Transcrever
+                transcription = await _transcribe_audio(msg.audio_bytes, msg.audio_mimetype)
+                if transcription:
+                    text_parts.append(transcription)
+
+                    # Avaliação de pronúncia nos bastidores
+                    try:
+                        fmt = "ogg" if "ogg" in msg.audio_mimetype else "mp3" if "mp3" in msg.audio_mimetype else "ogg"
+                        pron_result = await azure_service.assess_pronunciation(
+                            audio_bytes=msg.audio_bytes,
+                            reference_text=transcription,
+                            audio_format=fmt,
+                        )
+                        analysis = error_analyzer.analyze(pron_result)
+                        gross_errors = [
+                            e for e in (analysis.brazilian_errors or [])
+                            if e.accuracy < 40
+                        ]
+                        if gross_errors:
+                            errors_text = ", ".join(
+                                f"'{e.word}' (score {e.accuracy:.0f}/100)"
+                                for e in gross_errors[:3]
+                            )
+                            pronunciation_notes.append(
+                                f"Gross pronunciation errors in this audio: {errors_text}."
+                            )
+                        try:
+                            await sm.session_manager.update_session(phone, pron_result.overall_score)
+                        except Exception:
+                            pass
+                    except Exception as e:
+                        logger.warning(f"Pronúncia falhou: {e}")
+
+            elif msg.msg_type == "image":
+                # Extrair texto da imagem
+                try:
+                    extracted = await feedback_generator.extract_text_from_image(
+                        msg.image_bytes, msg.image_mimetype
+                    )
+                    if extracted:
+                        text_parts.append(f"[Sent an image with this English text: \"{extracted}\"]")
+                        await sm.session_manager.create_session(phone, extracted)
+                    else:
+                        text_parts.append("[Sent an image but no English text was found in it]")
+                except Exception as e:
+                    logger.warning(f"Imagem falhou: {e}")
+
+        if not text_parts:
+            return
+
+        # Montar mensagem combinada para o agente
+        combined = "\n".join(text_parts)
+        if pronunciation_notes:
+            combined += "\n[PRONUNCIATION DATA — invisible to student, for your reference only: "
+            combined += " ".join(pronunciation_notes)
+            combined += " If relevant, correct inline while conversing. Do NOT list errors or mention scores.]"
+
+        logger.info(f"Buffer processado ({len(messages)} msgs): {combined[:100]}...")
+
+        # Enviar pro agente
+        reply = await agent.process_message(phone, combined, push_name)
+
+        # Responder: se veio áudio, responder em áudio. Se só texto, responder em texto.
+        if has_audio:
+            await _send_voice_parts(phone, reply)
+        else:
+            await uazapi_service.send_text(phone, reply, reply_to=last_message_id)
+
+        logger.info(f"Resposta enviada para {phone}")
+
+    except Exception as e:
+        logger.error(f"Erro ao processar buffer: {e}", exc_info=True)
+        try:
+            await uazapi_service.send_text(
+                phone, "Desculpe, tive um problema. Tente novamente!"
+            )
+        except Exception:
+            pass
+
+
+# ============================================
 # PROCESSAMENTO DE MENSAGENS
 # ============================================
 
@@ -144,135 +315,8 @@ async def _transcribe_audio(audio_bytes: bytes, mimetype: str) -> str:
     return result.text.strip()
 
 
-async def process_text_message(phone: str, text: str, message_id: str, push_name: str = "Aluno"):
-    """Processa mensagem de texto via agente conversacional."""
-    try:
-        await uazapi_service.send_presence(phone, "composing")
-        reply = await agent.process_message(phone, text, push_name)
-        await uazapi_service.send_text(phone, reply, reply_to=message_id)
 
-    except Exception as e:
-        logger.error(f"Erro ao processar texto: {e}", exc_info=True)
-        await uazapi_service.send_text(
-            phone, "Desculpe, tive um problema. Tente novamente em alguns segundos!"
-        )
-
-
-async def process_audio_message(phone: str, message_id: str, push_name: str = "Aluno"):
-    """Processa áudio: transcreve + avalia pronúncia nos bastidores + conversa."""
-    try:
-        await uazapi_service.send_presence(phone, "composing")
-
-        # 1. Baixar áudio
-        audio_bytes, mimetype = await uazapi_service.download_audio(message_id)
-        logger.info(f"Áudio recebido: {len(audio_bytes)} bytes, {mimetype}")
-
-        # 2. Transcrever com Whisper
-        transcription = await _transcribe_audio(audio_bytes, mimetype)
-        logger.info(f"Transcrição: {transcription}")
-
-        if not transcription:
-            await _send_voice_reply(phone, "Não consegui entender o áudio. Pode tentar de novo?")
-            return
-
-        # 3. Avaliação de pronúncia nos bastidores (sempre roda)
-        pronunciation_note = ""
-        try:
-            audio_format = "ogg" if "ogg" in mimetype else "mp3" if "mp3" in mimetype else "ogg"
-            pronunciation_result = await azure_service.assess_pronunciation(
-                audio_bytes=audio_bytes,
-                reference_text=transcription,
-                audio_format=audio_format,
-            )
-            score = pronunciation_result.overall_score
-
-            # Analisar erros brasileiros
-            analysis = error_analyzer.analyze(pronunciation_result)
-
-            # Salvar no histórico de sessão
-            try:
-                await sm.session_manager.update_session(phone, score)
-            except Exception:
-                pass
-
-            # Montar nota de pronúncia para o agente (só erros grosseiros)
-            gross_errors = [
-                e for e in (analysis.brazilian_errors or [])
-                if e.accuracy < 40  # só erros bem graves
-            ]
-            if gross_errors:
-                errors_text = ", ".join(
-                    f"'{e.word}' (score {e.accuracy:.0f}/100)"
-                    for e in gross_errors[:3]
-                )
-                pronunciation_note = (
-                    f"\n[PRONUNCIATION DATA — invisible to student, for your reference only: "
-                    f"overall score {score:.0f}/100. "
-                    f"Gross errors: {errors_text}. "
-                    f"If relevant, you may gently correct these inline while continuing the conversation. "
-                    f"Do NOT stop to evaluate or list errors.]"
-                )
-            else:
-                pronunciation_note = (
-                    f"\n[PRONUNCIATION DATA — invisible to student: "
-                    f"score {score:.0f}/100, no gross errors. Do NOT mention the score or pronunciation quality.]"
-                )
-
-            logger.info(f"Pronúncia: score={score:.0f}, erros graves={len(gross_errors)}")
-
-        except Exception as e:
-            logger.warning(f"Avaliação de pronúncia falhou (não bloqueia): {e}")
-
-        # 4. Passar transcrição + nota de pronúncia para o agente CONVERSAR
-        message_for_agent = transcription + pronunciation_note
-        reply = await agent.process_message(phone, message_for_agent, push_name)
-
-        # 5. Responder com áudio(s)
-        await _send_voice_parts(phone, reply)
-
-        logger.info(f"Resposta enviada para {phone}")
-
-    except Exception as e:
-        logger.error(f"Erro ao processar áudio: {e}", exc_info=True)
-        await _send_voice_reply(
-            phone,
-            "Tive um problema ao processar seu áudio. Tente gravar novamente!",
-        )
-
-
-async def process_image_message(phone: str, message_id: str, push_name: str = "Aluno"):
-    """Processa imagem — extrai texto e cria sessão via agente."""
-    try:
-        await uazapi_service.send_presence(phone, "composing")
-        logger.info(f"📷 Processando imagem de {phone}")
-
-        # 1. Baixar imagem
-        image_bytes, mimetype = await uazapi_service.download_image(message_id)
-
-        # 2. Extrair texto com GPT Vision
-        extracted_text = await feedback_generator.extract_text_from_image(image_bytes, mimetype)
-
-        if not extracted_text:
-            reply = await agent.process_message(
-                phone,
-                "Enviei uma imagem mas parece não ter texto em inglês nela.",
-                push_name,
-            )
-            await uazapi_service.send_text(phone, reply, reply_to=message_id)
-            return
-
-        # 3. Criar sessão com texto extraído
-        await sm.session_manager.create_session(phone, extracted_text)
-
-        # 4. Resposta via agente
-        reply = await agent.process_image_result(phone, extracted_text, push_name)
-        await uazapi_service.send_text(phone, reply, reply_to=message_id)
-
-    except Exception as e:
-        logger.error(f"❌ Erro ao processar imagem: {e}", exc_info=True)
-        await uazapi_service.send_text(
-            phone, "😅 Tive um problema ao processar sua imagem. Tente enviar novamente!"
-        )
+# (Processamento individual removido — tudo passa pelo buffer acima)
 
 
 # ============================================
@@ -280,8 +324,8 @@ async def process_image_message(phone: str, message_id: str, push_name: str = "A
 # ============================================
 
 @app.post("/webhook/uazapi")
-async def webhook_uazapi(request: Request, background_tasks: BackgroundTasks):
-    """Webhook que recebe mensagens da Uazapi."""
+async def webhook_uazapi(request: Request):
+    """Webhook que recebe mensagens da Uazapi. Usa buffer com debounce."""
     try:
         payload = await request.json()
 
@@ -306,7 +350,7 @@ async def webhook_uazapi(request: Request, background_tasks: BackgroundTasks):
         push_name = message.get("senderName", "Aluno")
         msg_type = message.get("messageType", "")
 
-        logger.info(f"📨 {phone} ({push_name}) tipo: {msg_type}")
+        logger.info(f"{phone} ({push_name}) tipo: {msg_type}")
 
         # Salvar push_name
         try:
@@ -314,28 +358,60 @@ async def webhook_uazapi(request: Request, background_tasks: BackgroundTasks):
         except Exception:
             pass
 
-        # Áudio
-        if msg_type == "AudioMessage":
-            background_tasks.add_task(process_audio_message, phone, full_message_id, push_name)
-            return JSONResponse({"status": "processing", "type": "audio"})
-
-        # Imagem
-        if msg_type == "ImageMessage":
-            background_tasks.add_task(process_image_message, phone, full_message_id, push_name)
-            return JSONResponse({"status": "processing", "type": "image"})
-
-        # Texto
+        # Texto → buffer
         if msg_type in ("Conversation", "ExtendedTextMessage"):
             text = message.get("text", "")
             if text:
-                background_tasks.add_task(process_text_message, phone, text, message_id, push_name)
-                return JSONResponse({"status": "processing", "type": "text"})
+                await _add_to_buffer(
+                    phone,
+                    BufferedMessage(msg_type="text", text=text, message_id=message_id),
+                    push_name,
+                )
+                return JSONResponse({"status": "buffered", "type": "text"})
 
-        logger.info(f"⚠️ Tipo não suportado: {msg_type}")
+        # Áudio → baixar agora (webhook pode expirar), colocar no buffer
+        if msg_type == "AudioMessage":
+            try:
+                audio_bytes, mimetype = await uazapi_service.download_audio(full_message_id)
+                await _add_to_buffer(
+                    phone,
+                    BufferedMessage(
+                        msg_type="audio",
+                        message_id=full_message_id,
+                        audio_bytes=audio_bytes,
+                        audio_mimetype=mimetype,
+                    ),
+                    push_name,
+                )
+                return JSONResponse({"status": "buffered", "type": "audio"})
+            except Exception as e:
+                logger.error(f"Falha ao baixar áudio: {e}")
+                return JSONResponse({"status": "error", "message": str(e)})
+
+        # Imagem → baixar agora, colocar no buffer
+        if msg_type == "ImageMessage":
+            try:
+                image_bytes, mimetype = await uazapi_service.download_image(full_message_id)
+                await _add_to_buffer(
+                    phone,
+                    BufferedMessage(
+                        msg_type="image",
+                        message_id=full_message_id,
+                        image_bytes=image_bytes,
+                        image_mimetype=mimetype,
+                    ),
+                    push_name,
+                )
+                return JSONResponse({"status": "buffered", "type": "image"})
+            except Exception as e:
+                logger.error(f"Falha ao baixar imagem: {e}")
+                return JSONResponse({"status": "error", "message": str(e)})
+
+        logger.info(f"Tipo não suportado: {msg_type}")
         return JSONResponse({"status": "ignored", "reason": f"unsupported: {msg_type}"})
 
     except Exception as e:
-        logger.error(f"❌ Erro no webhook: {e}", exc_info=True)
+        logger.error(f"Erro no webhook: {e}", exc_info=True)
         return JSONResponse({"status": "error", "message": str(e)})
 
 
