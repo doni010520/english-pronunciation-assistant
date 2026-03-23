@@ -201,6 +201,17 @@ async def _flush_buffer(phone: str):
 
     logger.info(f"Buffer flush: {phone}, {len(messages)} mensagem(ns)")
 
+    # --- Comando "limpar dados": apaga histórico do número ---
+    for msg in messages:
+        if msg["msg_type"] == "text" and msg.get("text", "").strip().lower() in ("limpar dados", "limpar conversa", "reset"):
+            try:
+                await agent._db.table("conversation_history").delete().eq("phone", phone).execute()
+                logger.info(f"Histórico limpo para {phone}")
+            except Exception as e:
+                logger.warning(f"Erro ao limpar histórico: {e}")
+            await uazapi_service.send_text(phone, "Conversa limpa! Pode começar de novo. 👋")
+            return
+
     try:
         await uazapi_service.send_presence(phone, "composing")
 
