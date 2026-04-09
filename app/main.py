@@ -23,6 +23,7 @@ from app.services import (
 from app.services.rag import RAGService
 from app.services.agent import ConversationalAgent
 from app.services.feedback_generator import FeedbackGenerator
+from app.services.sdr_agent import SDRAgent
 import app.services.session_manager as sm
 
 
@@ -42,10 +43,12 @@ logger = logging.getLogger(__name__)
 # ============================================
 
 uazapi_service: UazapiService = None
+uazapi_sdr_service: UazapiService = None
 azure_service: AzureSpeechService = None
 error_analyzer: BrazilianErrorAnalyzer = None
 feedback_generator: FeedbackGenerator = None
 agent: ConversationalAgent = None
+sdr_agent: SDRAgent = None
 rag_service: RAGService = None
 openai_client: AsyncOpenAI = None
 redis_client: aioredis.Redis = None
@@ -53,7 +56,7 @@ redis_client: aioredis.Redis = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global uazapi_service, azure_service, error_analyzer, feedback_generator, agent, rag_service, openai_client, redis_client
+    global uazapi_service, uazapi_sdr_service, azure_service, error_analyzer, feedback_generator, agent, sdr_agent, rag_service, openai_client, redis_client
 
     logger.info("Inicializando servicos...")
     settings = get_settings()
@@ -77,7 +80,18 @@ async def lifespan(app: FastAPI):
 
     # Novos serviços
     rag_service = RAGService(supabase_client, openai_client)
-    agent = ConversationalAgent(supabase_client, openai_client, rag_service, sm.session_manager)
+    agent = ConversationalAgent(supabase_client, openai_client, rag_service, sm.session_manager, uazapi_service)
+
+    # SDR Agent (separate WhatsApp number for sales)
+    if settings.uazapi_sdr_base_url and settings.uazapi_sdr_token:
+        uazapi_sdr_service = UazapiService(
+            base_url=settings.uazapi_sdr_base_url,
+            token=settings.uazapi_sdr_token,
+        )
+        sdr_agent = SDRAgent(supabase_client, openai_client, uazapi_sdr_service)
+        logger.info("SDR Agent inicializado!")
+    else:
+        logger.warning("SDR Agent desabilitado: UAZAPI_SDR_BASE_URL ou UAZAPI_SDR_TOKEN não configurados.")
 
     logger.info("Servicos inicializados!")
     yield
@@ -450,6 +464,172 @@ async def webhook_uazapi(request: Request):
 
 
 # ============================================
+# WEBHOOK SDR (WhatsApp sales number)
+# ============================================
+
+@app.post("/webhook/sdr")
+async def webhook_sdr(request: Request):
+    """Webhook que recebe mensagens do número SDR (vendas)."""
+    try:
+        if not sdr_agent or not uazapi_sdr_service:
+            return JSONResponse({"status": "error", "message": "SDR agent not configured"}, status_code=503)
+
+        payload = await request.json()
+
+        event = payload.get("EventType", "")
+        if event != "messages":
+            return JSONResponse({"status": "ignored", "reason": f"event: {event}"})
+
+        message = payload.get("message")
+        if not message:
+            return JSONResponse({"status": "ignored", "reason": "no message"})
+
+        if message.get("fromMe", False) or message.get("wasSentByApi", False):
+            return JSONResponse({"status": "ignored", "reason": "from me"})
+
+        chatid = message.get("chatid", "")
+        if not chatid:
+            return JSONResponse({"status": "ignored", "reason": "no chatid"})
+
+        phone = extract_phone_from_jid(chatid)
+        push_name = message.get("senderName", "Lead")
+        msg_type = message.get("messageType", "")
+
+        logger.info(f"[SDR] {phone} ({push_name}) tipo: {msg_type}")
+
+        # Handle text messages only (for now)
+        if msg_type not in ("Conversation", "ExtendedTextMessage"):
+            logger.info(f"[SDR] Tipo não suportado: {msg_type}")
+            return JSONResponse({"status": "ignored", "reason": f"unsupported: {msg_type}"})
+
+        text = message.get("text", "")
+        if not text:
+            return JSONResponse({"status": "ignored", "reason": "empty text"})
+
+        # Send composing presence
+        await uazapi_sdr_service.send_presence(phone, "composing")
+
+        # Process with SDR agent
+        reply = await sdr_agent.process_message(phone, text, push_name)
+
+        # Send reply
+        message_id = message.get("messageid", "")
+        await uazapi_sdr_service.send_text(phone, reply, reply_to=message_id)
+
+        logger.info(f"[SDR] Resposta enviada para {phone}")
+        return JSONResponse({"status": "ok", "type": "text"})
+
+    except Exception as e:
+        logger.error(f"[SDR] Erro no webhook: {e}", exc_info=True)
+        return JSONResponse({"status": "error", "message": str(e)})
+
+
+# ============================================
+# SDR LEADS API
+# ============================================
+
+@app.get("/api/sdr/leads")
+async def list_sdr_leads(authorization: str = Header(None)):
+    """Lista todos os leads do SDR (protegido por admin token)."""
+    await verify_admin(authorization)
+
+    if not sdr_agent:
+        raise HTTPException(status_code=503, detail="SDR agent not configured")
+
+    result = await sdr_agent._db.table("sdr_leads").select("*").order("created_at", desc=True).execute()
+    return result.data
+
+
+# ============================================
+# LEAD CAPTURE (Landing Page Form)
+# ============================================
+
+@app.post("/api/leads")
+async def capture_lead(request: Request):
+    """Recebe lead do formulario da landing page, salva no banco e dispara SDR."""
+    data = await request.json()
+
+    name = data.get("name", "").strip()
+    phone = data.get("phone", "").strip()
+    lead_type = data.get("type", "other")
+    school_name = data.get("school_name", "").strip()
+    student_count = data.get("student_count")
+    main_pain = data.get("main_pain", "")
+
+    if not name or not phone:
+        raise HTTPException(status_code=400, detail="Nome e telefone sao obrigatorios")
+
+    # Normalizar telefone (garantir formato brasileiro com 55)
+    phone = phone.lstrip("+")
+    if not phone.startswith("55"):
+        phone = "55" + phone
+
+    # Salvar lead no banco
+    lead_data = {
+        "phone": phone,
+        "name": name,
+        "type": lead_type,
+        "school_name": school_name or None,
+        "student_count": student_count,
+        "main_pain": main_pain or None,
+        "source": "landing_page",
+        "status": "new",
+    }
+
+    try:
+        from supabase import PostgrestAPIError
+    except ImportError:
+        PostgrestAPIError = Exception
+
+    try:
+        await sdr_agent._db.table("sdr_leads").upsert(lead_data, on_conflict="phone").execute()
+    except Exception as e:
+        logger.error(f"Erro ao salvar lead: {e}")
+
+    # Disparar primeira mensagem do SDR via WhatsApp
+    if sdr_agent and uazapi_sdr_service:
+        try:
+            # Montar contexto do lead para o SDR
+            pain_map = {
+                "retention": "alunos desistindo",
+                "engagement": "pouca pratica entre as aulas",
+                "competition": "concorrencia com apps",
+                "scaling": "dificuldade de escalar",
+                "acquisition": "captacao de novos alunos",
+            }
+            pain_text = pain_map.get(main_pain, main_pain or "nao informado")
+            type_map = {
+                "school_owner": "dono(a) de escola",
+                "coordinator": "coordenador(a)",
+                "independent_teacher": "professor(a) autonomo(a)",
+                "other": "outro",
+            }
+            type_text = type_map.get(lead_type, lead_type)
+
+            context = (
+                f"[LEAD DO FORMULARIO] Nome: {name}. "
+                f"Tipo: {type_text}. "
+                f"Escola: {school_name or 'nao informou'}. "
+                f"Alunos: {student_count or 'nao informou'}. "
+                f"Maior desafio: {pain_text}. "
+                f"Essa pessoa acabou de preencher o formulario no site pedindo trial gratis. "
+                f"Inicie a conversa de forma personalizada usando essas informacoes."
+            )
+
+            # Gerar primeira mensagem do SDR com contexto
+            reply = await sdr_agent.process_message(phone, context, push_name=name)
+
+            # Enviar para o WhatsApp do lead
+            await uazapi_sdr_service.send_text(phone, reply)
+            logger.info(f"SDR primeira mensagem enviada para {phone}")
+
+        except Exception as e:
+            logger.error(f"Erro ao disparar SDR para lead {phone}: {e}")
+
+    return {"status": "ok", "message": "Lead capturado com sucesso"}
+
+
+# ============================================
 # ADMIN PANEL
 # ============================================
 
@@ -527,6 +707,24 @@ async def list_users(authorization: str = Header(None)):
 # ============================================
 # WEB CHAT (avatar)
 # ============================================
+
+@app.get("/", response_class=HTMLResponse)
+async def form_page():
+    """Serve o formulario de captura de leads."""
+    html_path = STATIC_DIR / "form.html"
+    if not html_path.exists():
+        raise HTTPException(status_code=404, detail="Form page not found")
+    return HTMLResponse(html_path.read_text(encoding="utf-8"))
+
+
+@app.get("/landing", response_class=HTMLResponse)
+async def landing_page():
+    """Serve a landing page (backup)."""
+    html_path = STATIC_DIR / "landing.html"
+    if not html_path.exists():
+        raise HTTPException(status_code=404, detail="Landing page not found")
+    return HTMLResponse(html_path.read_text(encoding="utf-8"))
+
 
 @app.get("/chat", response_class=HTMLResponse)
 async def chat_page():

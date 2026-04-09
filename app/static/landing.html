@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FluencyAgent — Tutor de Inglês por IA no WhatsApp</title>
+<meta name="description" content="Um tutor de inglês por IA que conversa, corrige pronúncia e cria jogos interativos no WhatsApp. Disponível 24/7 para seus alunos.">
+<meta property="og:title" content="FluencyAgent — Tutor de Inglês por IA no WhatsApp">
+<meta property="og:description" content="Seus alunos praticando inglês todo dia no WhatsApp com Inteligência Artificial. Personalizado com o conteúdo da sua escola.">
+<meta property="og:image" content="/static/og-image.png">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="pt_BR">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="FluencyAgent — Tutor de Inglês por IA no WhatsApp">
+<meta name="twitter:description" content="Seus alunos praticando inglês todo dia no WhatsApp com Inteligência Artificial.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f172a;
+    --surface: #1e293b;
+    --surface2: #263348;
+    --border: #334155;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --primary: #3b82f6;
+    --primary-hover: #2563eb;
+    --primary-glow: rgba(59, 130, 246, 0.15);
+    --success: #22c55e;
+    --whatsapp: #25D366;
+    --whatsapp-hover: #1ebe5a;
+    --accent: #8b5cf6;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+
+  /* ---- NAV ---- */
+  nav {
+    position: fixed; top: 0; left: 0; right: 0;
+    z-index: 100;
+    background: rgba(15, 23, 42, 0.85);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    transition: box-shadow 0.3s;
+  }
+  nav.scrolled { box-shadow: 0 4px 24px rgba(0,0,0,0.3); }
+  .nav-inner {
+    max-width: 1100px; margin: 0 auto;
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 14px 24px;
+  }
+  .nav-brand { font-weight: 800; font-size: 1.25rem; color: var(--text); text-decoration: none; }
+  .nav-brand span { color: var(--primary); }
+  .nav-links { display: flex; gap: 28px; align-items: center; }
+  .nav-links a {
+    color: var(--muted); text-decoration: none; font-size: 0.9rem; font-weight: 500;
+    transition: color 0.2s;
+  }
+  .nav-links a:hover { color: var(--text); }
+  .nav-cta {
+    background: var(--whatsapp) !important; color: #fff !important;
+    padding: 8px 18px; border-radius: 8px; font-weight: 600 !important; font-size: 0.85rem !important;
+    transition: background 0.2s, transform 0.2s !important;
+  }
+  .nav-cta:hover { background: var(--whatsapp-hover) !important; transform: translateY(-1px); }
+  .nav-toggle { display: none; background: none; border: none; color: var(--text); font-size: 1.5rem; cursor: pointer; }
+
+  /* ---- SECTIONS ---- */
+  section { padding: 100px 24px; }
+  .container { max-width: 1100px; margin: 0 auto; }
+  .section-title {
+    font-size: clamp(1.6rem, 4vw, 2.2rem); font-weight: 800;
+    text-align: center; margin-bottom: 16px;
+  }
+  .section-subtitle {
+    color: var(--muted); text-align: center; max-width: 620px; margin: 0 auto 56px;
+    font-size: 1.05rem;
+  }
+
+  /* ---- HERO ---- */
+  #hero {
+    padding: 160px 24px 100px;
+    text-align: center;
+    background: radial-gradient(ellipse at 50% 0%, rgba(59,130,246,0.08) 0%, transparent 60%);
+  }
+  .hero-badge {
+    display: inline-block; background: var(--surface); border: 1px solid var(--border);
+    color: var(--primary); padding: 6px 16px; border-radius: 20px; font-size: 0.8rem;
+    font-weight: 600; margin-bottom: 28px; letter-spacing: 0.03em;
+  }
+  .hero-title {
+    font-size: clamp(2rem, 5.5vw, 3.2rem); font-weight: 800; line-height: 1.15;
+    max-width: 820px; margin: 0 auto 24px;
+  }
+  .hero-title em {
+    font-style: normal;
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .hero-sub {
+    color: var(--muted); font-size: clamp(1rem, 2.5vw, 1.2rem);
+    max-width: 640px; margin: 0 auto 40px; line-height: 1.7;
+  }
+  .hero-cta-group { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+  .btn-whatsapp {
+    display: inline-flex; align-items: center; gap: 10px;
+    background: var(--whatsapp); color: #fff; padding: 16px 36px;
+    border-radius: 12px; font-size: 1.1rem; font-weight: 700;
+    text-decoration: none; border: none; cursor: pointer;
+    transition: background 0.2s, transform 0.2s, box-shadow 0.2s;
+    box-shadow: 0 4px 20px rgba(37, 211, 102, 0.3);
+  }
+  .btn-whatsapp:hover {
+    background: var(--whatsapp-hover); transform: translateY(-2px);
+    box-shadow: 0 8px 30px rgba(37, 211, 102, 0.4);
+  }
+  .btn-whatsapp svg { width: 22px; height: 22px; fill: #fff; }
+  .hero-note { color: var(--muted); font-size: 0.85rem; }
+
+  /* ---- PROBLEM ---- */
+  #problema { background: var(--surface); }
+  .problem-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 24px;
+  }
+  .problem-card {
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 16px; padding: 32px;
+    transition: transform 0.3s, border-color 0.3s;
+  }
+  .problem-card:hover { transform: translateY(-4px); border-color: #ef4444; }
+  .problem-icon {
+    width: 48px; height: 48px; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.4rem; margin-bottom: 20px;
+    background: rgba(239, 68, 68, 0.1); color: #ef4444;
+  }
+  .problem-card p { color: var(--muted); font-size: 0.95rem; line-height: 1.7; }
+
+  /* ---- SOLUTION ---- */
+  .feature-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 24px;
+  }
+  .feature-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 16px; padding: 32px;
+    transition: transform 0.3s, border-color 0.3s;
+  }
+  .feature-card:hover { transform: translateY(-4px); border-color: var(--primary); }
+  .feature-icon {
+    width: 48px; height: 48px; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.4rem; margin-bottom: 20px;
+    background: var(--primary-glow); color: var(--primary);
+  }
+  .feature-card h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: 8px; }
+  .feature-card p { color: var(--muted); font-size: 0.9rem; line-height: 1.6; }
+
+  /* ---- HOW IT WORKS ---- */
+  #como-funciona { background: var(--surface); }
+  .steps {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 32px; position: relative;
+  }
+  .step { text-align: center; }
+  .step-number {
+    width: 56px; height: 56px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+    color: #fff; font-size: 1.4rem; font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 20px;
+  }
+  .step h3 { font-size: 1.15rem; font-weight: 700; margin-bottom: 10px; }
+  .step p { color: var(--muted); font-size: 0.9rem; max-width: 280px; margin: 0 auto; }
+
+  /* ---- DEMO ---- */
+  .demo-wrapper { max-width: 420px; margin: 0 auto; }
+  .phone-mockup {
+    background: #0b1420; border: 2px solid var(--border);
+    border-radius: 24px; padding: 24px 18px; position: relative;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+  }
+  .phone-header {
+    display: flex; align-items: center; gap: 10px;
+    padding-bottom: 16px; border-bottom: 1px solid var(--border); margin-bottom: 16px;
+  }
+  .phone-avatar {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.9rem; font-weight: 700; color: #fff;
+  }
+  .phone-name { font-size: 0.95rem; font-weight: 600; }
+  .phone-status { font-size: 0.75rem; color: var(--whatsapp); }
+  .chat-messages { display: flex; flex-direction: column; gap: 10px; }
+  .msg-bubble {
+    max-width: 85%; padding: 10px 14px; border-radius: 14px;
+    font-size: 0.9rem; line-height: 1.5;
+  }
+  .msg-student {
+    align-self: flex-end;
+    background: #005c4b; color: #e2e8f0;
+    border-bottom-right-radius: 4px;
+  }
+  .msg-agent {
+    align-self: flex-start;
+    background: var(--surface2); color: var(--text);
+    border-bottom-left-radius: 4px;
+  }
+  .msg-error { text-decoration: underline wavy #ef4444; text-decoration-skip-ink: none; text-underline-offset: 3px; }
+  .demo-caption {
+    text-align: center; margin-top: 28px;
+    color: var(--muted); font-size: 0.95rem; font-style: italic;
+  }
+
+  /* ---- PRICING ---- */
+  #planos { background: var(--surface); }
+  .pricing-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 24px; align-items: stretch;
+  }
+  .pricing-card {
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 20px; padding: 36px 28px; display: flex; flex-direction: column;
+    transition: transform 0.3s;
+  }
+  .pricing-card:hover { transform: translateY(-4px); }
+  .pricing-card.featured {
+    border-color: var(--primary);
+    box-shadow: 0 0 40px rgba(59, 130, 246, 0.15);
+    position: relative;
+  }
+  .pricing-badge {
+    position: absolute; top: -14px; left: 50%; transform: translateX(-50%);
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+    color: #fff; padding: 4px 20px; border-radius: 20px;
+    font-size: 0.78rem; font-weight: 700; white-space: nowrap;
+  }
+  .pricing-name { font-size: 1.1rem; font-weight: 700; margin-bottom: 4px; }
+  .pricing-desc { color: var(--muted); font-size: 0.85rem; margin-bottom: 20px; }
+  .pricing-price { font-size: 2.4rem; font-weight: 800; margin-bottom: 4px; }
+  .pricing-price span { font-size: 0.9rem; font-weight: 500; color: var(--muted); }
+  .pricing-features { list-style: none; margin: 24px 0; flex: 1; }
+  .pricing-features li {
+    padding: 8px 0; color: var(--muted); font-size: 0.9rem;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .pricing-features li::before {
+    content: ''; width: 18px; height: 18px; border-radius: 50%;
+    background: rgba(34,197,94,0.15); flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath fill='%2322c55e' d='M7.629 14.571L3.146 10.088l1.414-1.414 3.069 3.069 7.811-7.811 1.414 1.414z'/%3E%3C/svg%3E");
+    background-size: 14px; background-repeat: no-repeat; background-position: center;
+  }
+  .btn-trial {
+    display: block; text-align: center; padding: 14px;
+    background: var(--primary); color: #fff;
+    border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 0.95rem;
+    transition: background 0.2s, transform 0.2s;
+  }
+  .btn-trial:hover { background: var(--primary-hover); transform: translateY(-2px); }
+  .pricing-card.featured .btn-trial {
+    background: var(--whatsapp);
+  }
+  .pricing-card.featured .btn-trial:hover { background: var(--whatsapp-hover); }
+  .pricing-enterprise {
+    text-align: center; margin-top: 36px; color: var(--muted); font-size: 0.95rem;
+  }
+  .pricing-enterprise a { color: var(--primary); text-decoration: none; font-weight: 600; }
+  .pricing-enterprise a:hover { text-decoration: underline; }
+
+  /* ---- FAQ ---- */
+  .faq-list { max-width: 720px; margin: 0 auto; }
+  .faq-item {
+    border: 1px solid var(--border); border-radius: 12px;
+    margin-bottom: 12px; overflow: hidden;
+    transition: border-color 0.3s;
+  }
+  .faq-item:hover { border-color: var(--primary); }
+  .faq-question {
+    width: 100%; background: var(--surface); border: none; color: var(--text);
+    padding: 20px 24px; font-size: 1rem; font-weight: 600; text-align: left;
+    cursor: pointer; display: flex; justify-content: space-between; align-items: center;
+    font-family: inherit;
+  }
+  .faq-question::after {
+    content: '+'; font-size: 1.4rem; color: var(--muted);
+    transition: transform 0.3s;
+  }
+  .faq-item.open .faq-question::after { content: '\2212'; }
+  .faq-answer {
+    max-height: 0; overflow: hidden;
+    transition: max-height 0.4s ease, padding 0.3s;
+  }
+  .faq-item.open .faq-answer { max-height: 300px; }
+  .faq-answer-inner {
+    padding: 0 24px 20px;
+    color: var(--muted); font-size: 0.95rem; line-height: 1.7;
+  }
+
+  /* ---- LEAD FORM ---- */
+  #formulario { background: var(--surface); }
+  .form-wrapper {
+    max-width: 520px; margin: 0 auto;
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 20px; padding: 40px 32px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+  }
+  .form-wrapper h3 {
+    font-size: 1.3rem; font-weight: 700; text-align: center; margin-bottom: 8px;
+  }
+  .form-wrapper .form-sub {
+    color: var(--muted); text-align: center; font-size: 0.9rem; margin-bottom: 28px;
+  }
+  .form-group { margin-bottom: 16px; }
+  .form-group label {
+    display: block; color: var(--muted); font-size: 0.82rem;
+    font-weight: 600; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .form-group input, .form-group select, .form-group textarea {
+    width: 100%; background: var(--surface); border: 1px solid var(--border);
+    color: var(--text); padding: 12px 14px; border-radius: 10px;
+    font-size: 0.95rem; font-family: inherit; transition: border-color 0.2s;
+  }
+  .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+    outline: none; border-color: var(--primary);
+  }
+  .form-group select { cursor: pointer; }
+  .form-group textarea { min-height: 80px; resize: vertical; }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 480px) { .form-row { grid-template-columns: 1fr; } }
+  .btn-submit {
+    width: 100%; padding: 16px; margin-top: 8px;
+    background: var(--whatsapp); color: #fff; border: none; border-radius: 12px;
+    font-size: 1.05rem; font-weight: 700; cursor: pointer;
+    transition: background 0.2s, transform 0.2s;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .btn-submit:hover { background: var(--whatsapp-hover); transform: translateY(-2px); }
+  .btn-submit:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+  .btn-submit svg { width: 20px; height: 20px; fill: #fff; }
+  .form-note { text-align: center; color: var(--muted); font-size: 0.8rem; margin-top: 12px; }
+  .form-success {
+    display: none; text-align: center; padding: 32px 16px;
+  }
+  .form-success h3 { color: var(--success); font-size: 1.3rem; margin-bottom: 8px; }
+  .form-success p { color: var(--muted); font-size: 0.95rem; line-height: 1.6; }
+  .form-success .whatsapp-link {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--whatsapp); color: #fff; padding: 14px 28px;
+    border-radius: 12px; font-weight: 700; text-decoration: none;
+    margin-top: 20px; transition: background 0.2s;
+  }
+  .form-success .whatsapp-link:hover { background: var(--whatsapp-hover); }
+  .form-success .whatsapp-link svg { width: 20px; height: 20px; fill: #fff; }
+
+  /* ---- FINAL CTA ---- */
+  #cta-final {
+    text-align: center;
+    background: radial-gradient(ellipse at 50% 100%, rgba(59,130,246,0.08) 0%, transparent 60%);
+  }
+  #cta-final .section-title { margin-bottom: 12px; }
+  #cta-final .section-subtitle { margin-bottom: 40px; }
+
+  /* ---- FOOTER ---- */
+  footer {
+    text-align: center; padding: 32px 24px;
+    border-top: 1px solid var(--border);
+    color: var(--muted); font-size: 0.85rem;
+  }
+
+  /* ---- FLOATING WHATSAPP ---- */
+  .floating-whatsapp {
+    position: fixed; bottom: 24px; right: 24px; z-index: 90;
+    width: 60px; height: 60px; border-radius: 50%;
+    background: var(--whatsapp); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    text-decoration: none;
+    box-shadow: 0 4px 20px rgba(37,211,102,0.4);
+    transition: transform 0.3s, box-shadow 0.3s;
+    animation: pulse-wa 2s infinite;
+  }
+  .floating-whatsapp:hover {
+    transform: scale(1.1);
+    box-shadow: 0 6px 28px rgba(37,211,102,0.5);
+  }
+  .floating-whatsapp svg { width: 30px; height: 30px; fill: #fff; }
+  @keyframes pulse-wa {
+    0%, 100% { box-shadow: 0 4px 20px rgba(37,211,102,0.4); }
+    50% { box-shadow: 0 4px 30px rgba(37,211,102,0.6); }
+  }
+
+  /* ---- FADE IN ---- */
+  .fade-in {
+    opacity: 0; transform: translateY(30px);
+    transition: opacity 0.7s ease, transform 0.7s ease;
+  }
+  .fade-in.visible { opacity: 1; transform: translateY(0); }
+
+  /* ---- RESPONSIVE ---- */
+  @media (max-width: 768px) {
+    .nav-links { display: none; }
+    .nav-links.open {
+      display: flex; flex-direction: column;
+      position: absolute; top: 100%; left: 0; right: 0;
+      background: var(--bg); border-bottom: 1px solid var(--border);
+      padding: 20px 24px; gap: 16px;
+    }
+    .nav-toggle { display: block; }
+    section { padding: 72px 20px; }
+    #hero { padding: 120px 20px 72px; }
+    .pricing-grid { grid-template-columns: 1fr; max-width: 400px; margin: 0 auto; }
+  }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav id="navbar">
+  <div class="nav-inner">
+    <a href="#hero" class="nav-brand">Fluency<span>Agent</span></a>
+    <button class="nav-toggle" onclick="document.querySelector('.nav-links').classList.toggle('open')" aria-label="Menu">&#9776;</button>
+    <div class="nav-links">
+      <a href="#problema">Problema</a>
+      <a href="#solucao">Solucao</a>
+      <a href="#como-funciona">Como funciona</a>
+      <a href="#planos">Planos</a>
+      <a href="#faq">FAQ</a>
+      <a href="#formulario" class="nav-cta">Testar gratis</a>
+    </div>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section id="hero">
+  <div class="container">
+    <div class="hero-badge">Feito para escolas de idiomas no Brasil</div>
+    <h1 class="hero-title fade-in">
+      Seus alunos praticando ingles <em>TODO DIA</em> no WhatsApp &mdash; com Inteligencia Artificial
+    </h1>
+    <p class="hero-sub fade-in">
+      Um tutor de ingles por IA que conversa, corrige pronuncia e cria jogos interativos. Disponivel 24/7. Personalizado com o conteudo da sua escola.
+    </p>
+    <div class="hero-cta-group fade-in">
+      <a href="#formulario" class="btn-whatsapp" style="text-decoration:none;">
+        Quero testar gratis por 7 dias &rarr;
+      </a>
+      <span class="hero-note">Sem cartao de credito. Sem compromisso.</span>
+    </div>
+  </div>
+</section>
+
+<!-- PROBLEM -->
+<section id="problema">
+  <div class="container">
+    <h2 class="section-title fade-in">O problema que toda escola de idiomas enfrenta</h2>
+    <div class="section-subtitle fade-in"></div>
+    <div class="problem-grid">
+      <div class="problem-card fade-in">
+        <div class="problem-icon">&#9200;</div>
+        <p>Seus alunos so praticam <strong>2h por semana</strong>. Nas outras 166h, eles esquecem.</p>
+      </div>
+      <div class="problem-card fade-in">
+        <div class="problem-icon">&#128200;</div>
+        <p>Sem pratica diaria, o aluno nao evolui. Sem evolucao, <strong>ele desiste</strong>.</p>
+      </div>
+      <div class="problem-card fade-in">
+        <div class="problem-icon">&#128241;</div>
+        <p>Enquanto isso, apps gratuitos como Duolingo <strong>competem pela atencao dele</strong>.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SOLUTION -->
+<section id="solucao">
+  <div class="container">
+    <h2 class="section-title fade-in">E se seus alunos tivessem um professor disponivel 24 horas?</h2>
+    <div class="section-subtitle fade-in"></div>
+    <div class="feature-grid">
+      <div class="feature-card fade-in">
+        <div class="feature-icon">&#128172;</div>
+        <h3>Conversacao Natural</h3>
+        <p>O agente conversa em ingles como um amigo. Faz perguntas, reage, mantem o papo fluindo.</p>
+      </div>
+      <div class="feature-card fade-in">
+        <div class="feature-icon">&#9989;</div>
+        <h3>Correcao Inteligente</h3>
+        <p>Corrige erros de forma invisivel, sem constrangimento. O aluno aprende sem perceber.</p>
+      </div>
+      <div class="feature-card fade-in">
+        <div class="feature-icon">&#127908;</div>
+        <h3>Pronuncia por IA</h3>
+        <p>Avaliacao fonemica em tempo real. Detecta os 9 erros mais comuns de brasileiros.</p>
+      </div>
+      <div class="feature-card fade-in">
+        <div class="feature-icon">&#127918;</div>
+        <h3>Jogos no WhatsApp</h3>
+        <p>Quizzes e enquetes interativas. Gamificacao que faz o aluno pedir pra estudar.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section id="como-funciona">
+  <div class="container">
+    <h2 class="section-title fade-in">Como funciona</h2>
+    <div class="section-subtitle fade-in"></div>
+    <div class="steps">
+      <div class="step fade-in">
+        <div class="step-number">1</div>
+        <h3>Voce configura</h3>
+        <p>Escolha o nome, personalidade e suba os materiais da sua escola.</p>
+      </div>
+      <div class="step fade-in">
+        <div class="step-number">2</div>
+        <h3>Alunos adicionam</h3>
+        <p>Seus alunos salvam o numero no WhatsApp e comecam a praticar.</p>
+      </div>
+      <div class="step fade-in">
+        <div class="step-number">3</div>
+        <h3>Voce acompanha</h3>
+        <p>Painel admin com progresso, scores e engajamento de cada aluno.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- DEMO -->
+<section id="demo">
+  <div class="container">
+    <h2 class="section-title fade-in">Veja o agente em acao</h2>
+    <div class="section-subtitle fade-in"></div>
+    <div class="demo-wrapper fade-in">
+      <div class="phone-mockup">
+        <div class="phone-header">
+          <div class="phone-avatar">FA</div>
+          <div>
+            <div class="phone-name">FluencyAgent</div>
+            <div class="phone-status">online</div>
+          </div>
+        </div>
+        <div class="chat-messages">
+          <div class="msg-bubble msg-student">
+            I <span class="msg-error">goed</span> to the store yesterday
+          </div>
+          <div class="msg-bubble msg-agent">
+            Oh you <strong>went</strong> to the store? Nice! What did you get?
+          </div>
+          <div class="msg-bubble msg-student">
+            I <span class="msg-error">buyed</span> some fruits
+          </div>
+          <div class="msg-bubble msg-agent">
+            You <strong>bought</strong> fruits! Healthy choice &#127822; What's your favorite fruit?
+          </div>
+        </div>
+      </div>
+      <p class="demo-caption">Correcao natural. A conversa nunca para.</p>
+    </div>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section id="planos">
+  <div class="container">
+    <h2 class="section-title fade-in">Planos</h2>
+    <div class="section-subtitle fade-in">Comece gratis. Cancele quando quiser.</div>
+    <div class="pricing-grid">
+
+      <div class="pricing-card fade-in">
+        <div class="pricing-name">Starter</div>
+        <div class="pricing-desc">Para professores autonomos</div>
+        <div class="pricing-price">R$ 197 <span>/mes</span></div>
+        <ul class="pricing-features">
+          <li>Ate 30 alunos</li>
+          <li>Agente personalizado</li>
+          <li>Painel basico</li>
+          <li>Suporte por email</li>
+        </ul>
+        <a href="#formulario" class="btn-trial">Comecar trial gratis</a>
+      </div>
+
+      <div class="pricing-card featured fade-in">
+        <div class="pricing-badge">Mais popular</div>
+        <div class="pricing-name">Pro</div>
+        <div class="pricing-desc">Para escolas pequenas</div>
+        <div class="pricing-price">R$ 497 <span>/mes</span></div>
+        <ul class="pricing-features">
+          <li>Ate 100 alunos</li>
+          <li>Tudo do Starter</li>
+          <li>SDR automatico incluso</li>
+          <li>Relatorios avancados</li>
+          <li>Suporte prioritario</li>
+        </ul>
+        <a href="#formulario" class="btn-trial">Comecar trial gratis</a>
+      </div>
+
+      <div class="pricing-card fade-in">
+        <div class="pricing-name">Business</div>
+        <div class="pricing-desc">Para escolas medias e grandes</div>
+        <div class="pricing-price">R$ 997 <span>/mes</span></div>
+        <ul class="pricing-features">
+          <li>Ate 300 alunos</li>
+          <li>Tudo do Pro</li>
+          <li>Personalizacao completa</li>
+          <li>API + integracoes</li>
+          <li>Gerente de conta dedicado</li>
+        </ul>
+        <a href="#formulario" class="btn-trial">Comecar trial gratis</a>
+      </div>
+
+    </div>
+    <p class="pricing-enterprise fade-in">
+      Enterprise? <a href="#formulario">Fale conosco.</a>
+    </p>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section id="faq">
+  <div class="container">
+    <h2 class="section-title fade-in">Perguntas frequentes</h2>
+    <div class="section-subtitle fade-in"></div>
+    <div class="faq-list">
+
+      <div class="faq-item fade-in">
+        <button class="faq-question" onclick="this.parentElement.classList.toggle('open')">
+          Vai substituir o professor?
+        </button>
+        <div class="faq-answer"><div class="faq-answer-inner">
+          De jeito nenhum. O agente e um complemento. O aluno pratica com a IA entre as aulas e chega muito mais preparado.
+        </div></div>
+      </div>
+
+      <div class="faq-item fade-in">
+        <button class="faq-question" onclick="this.parentElement.classList.toggle('open')">
+          Meus alunos vao usar?
+        </button>
+        <div class="faq-answer"><div class="faq-answer-inner">
+          O agente puxa conversa, manda quiz, e como um amigo no WhatsApp. A taxa de engajamento e altissima.
+        </div></div>
+      </div>
+
+      <div class="faq-item fade-in">
+        <button class="faq-question" onclick="this.parentElement.classList.toggle('open')">
+          Posso personalizar com meus materiais?
+        </button>
+        <div class="faq-answer"><div class="faq-answer-inner">
+          Sim. Voce sobe suas apostilas, vocabulario e temas no painel admin. O agente usa isso como base.
+        </div></div>
+      </div>
+
+      <div class="faq-item fade-in">
+        <button class="faq-question" onclick="this.parentElement.classList.toggle('open')">
+          Como funciona o trial?
+        </button>
+        <div class="faq-answer"><div class="faq-answer-inner">
+          7 dias gratis, sem cartao. Eu configuro o agente com a cara da sua escola e voce convida ate 10 alunos.
+        </div></div>
+      </div>
+
+      <div class="faq-item fade-in">
+        <button class="faq-question" onclick="this.parentElement.classList.toggle('open')">
+          E a pronuncia, como avalia?
+        </button>
+        <div class="faq-answer"><div class="faq-answer-inner">
+          Usamos tecnologia de avaliacao fonemica que analisa cada som. Identifica os erros mais comuns de brasileiros.
+        </div></div>
+      </div>
+
+      <div class="faq-item fade-in">
+        <button class="faq-question" onclick="this.parentElement.classList.toggle('open')">
+          Funciona em grupo ou individual?
+        </button>
+        <div class="faq-answer"><div class="faq-answer-inner">
+          Individual. Cada aluno tem sua propria conversa privada com o agente.
+        </div></div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- LEAD FORM -->
+<section id="formulario">
+  <div class="container">
+    <h2 class="section-title fade-in">Comece seu trial gratis de 7 dias</h2>
+    <p class="section-subtitle fade-in">Preencha o formulario e nossa equipe entra em contato pelo WhatsApp em minutos.</p>
+    <div class="form-wrapper fade-in">
+
+      <!-- FORM -->
+      <div id="lead-form-container">
+        <h3>Solicitar acesso</h3>
+        <p class="form-sub">Sem cartao de credito. Sem compromisso.</p>
+        <form id="lead-form" onsubmit="return submitLeadForm(event)">
+          <div class="form-group">
+            <label for="f-name">Seu nome *</label>
+            <input type="text" id="f-name" name="name" required placeholder="Ex: Maria Silva">
+          </div>
+          <div class="form-group">
+            <label for="f-phone">WhatsApp *</label>
+            <input type="tel" id="f-phone" name="phone" required placeholder="(11) 99999-9999">
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="f-type">Voce e *</label>
+              <select id="f-type" name="type" required>
+                <option value="" disabled selected>Selecione</option>
+                <option value="school_owner">Dono(a) de escola</option>
+                <option value="coordinator">Coordenador(a)</option>
+                <option value="independent_teacher">Professor(a) autonomo(a)</option>
+                <option value="other">Outro</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="f-students">Qtd de alunos</label>
+              <input type="number" id="f-students" name="student_count" placeholder="Ex: 50" min="1">
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="f-school">Nome da escola</label>
+            <input type="text" id="f-school" name="school_name" placeholder="Ex: English House (opcional para autonomos)">
+          </div>
+          <div class="form-group">
+            <label for="f-pain">Qual seu maior desafio hoje?</label>
+            <select id="f-pain" name="main_pain">
+              <option value="" disabled selected>Selecione (opcional)</option>
+              <option value="retention">Alunos desistindo / baixa retencao</option>
+              <option value="engagement">Pouca pratica entre as aulas</option>
+              <option value="competition">Concorrencia com apps gratuitos</option>
+              <option value="scaling">Dificuldade de escalar</option>
+              <option value="acquisition">Captacao de novos alunos</option>
+              <option value="other">Outro</option>
+            </select>
+          </div>
+          <button type="submit" class="btn-submit" id="btn-submit">
+            Quero meu trial gratis
+          </button>
+          <p class="form-note">Responderemos pelo WhatsApp em ate 5 minutos.</p>
+        </form>
+      </div>
+
+      <!-- SUCCESS -->
+      <div id="lead-form-success" class="form-success">
+        <h3>Recebemos seus dados!</h3>
+        <p>Em instantes, nossa equipe vai te chamar no WhatsApp para configurar seu trial personalizado.</p>
+        <p style="margin-top:12px; color: var(--text);">Fique de olho no seu WhatsApp!</p>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- FINAL CTA -->
+<section id="cta-final">
+  <div class="container">
+    <h2 class="section-title fade-in">Pronto pra transformar sua escola?</h2>
+    <p class="section-subtitle fade-in">Preencha o formulario acima e comece em minutos.</p>
+    <div class="hero-cta-group fade-in">
+      <a href="#formulario" class="btn-whatsapp" style="text-decoration:none;">
+        Quero testar gratis &rarr;
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  &copy; 2026 FluencyAgent. Todos os direitos reservados.
+</footer>
+
+<!-- FLOATING CTA -->
+<a href="#formulario" class="floating-whatsapp" aria-label="Formulario" style="text-decoration:none;">
+  <svg viewBox="0 0 24 24" fill="#fff" width="28" height="28"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>
+</a>
+
+<script>
+// Navbar scroll effect
+const nav = document.getElementById('navbar');
+window.addEventListener('scroll', () => {
+  nav.classList.toggle('scrolled', window.scrollY > 40);
+});
+
+// Close mobile menu on link click
+document.querySelectorAll('.nav-links a').forEach(a => {
+  a.addEventListener('click', () => {
+    document.querySelector('.nav-links').classList.remove('open');
+  });
+});
+
+// Intersection Observer for fade-in animations
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      entry.target.classList.add('visible');
+    }
+  });
+}, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+
+document.querySelectorAll('.fade-in').forEach(el => observer.observe(el));
+
+// Lead form submission
+async function submitLeadForm(e) {
+  e.preventDefault();
+  const btn = document.getElementById('btn-submit');
+  btn.disabled = true;
+  btn.textContent = 'Enviando...';
+
+  const form = document.getElementById('lead-form');
+  const data = {
+    name: form.name.value.trim(),
+    phone: form.phone.value.trim().replace(/\D/g, ''),
+    type: form.type.value,
+    school_name: form.school_name.value.trim(),
+    student_count: parseInt(form.student_count.value) || null,
+    main_pain: form.main_pain.value || null,
+  };
+
+  try {
+    const res = await fetch('/api/leads', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('Erro ao enviar');
+
+    document.getElementById('lead-form-container').style.display = 'none';
+    document.getElementById('lead-form-success').style.display = 'block';
+  } catch (err) {
+    alert('Erro ao enviar formulario. Tente novamente.');
+    btn.disabled = false;
+    btn.textContent = 'Quero meu trial gratis';
+  }
+  return false;
+}
+
+// Phone mask
+document.getElementById('f-phone').addEventListener('input', function(e) {
+  let v = e.target.value.replace(/\D/g, '');
+  if (v.length > 11) v = v.slice(0, 11);
+  if (v.length > 6) v = '(' + v.slice(0,2) + ') ' + v.slice(2,7) + '-' + v.slice(7);
+  else if (v.length > 2) v = '(' + v.slice(0,2) + ') ' + v.slice(2);
+  else if (v.length > 0) v = '(' + v;
+  e.target.value = v;
+});
+</script>
+
+</body>
+</html>

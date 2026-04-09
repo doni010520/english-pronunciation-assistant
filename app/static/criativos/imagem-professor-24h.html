@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap');
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', sans-serif; background: #0a0a0a; display: flex; justify-content: center; padding: 32px; }
+  .card {
+    width: 1080px; height: 1080px;
+    background: linear-gradient(150deg, #0f172a 0%, #1e293b 100%);
+    border-radius: 24px; overflow: hidden;
+    position: relative; display: flex; flex-direction: column;
+    justify-content: center; align-items: center; text-align: center;
+    padding: 80px;
+  }
+  .emoji { font-size: 120px; margin-bottom: 40px; }
+  h1 {
+    font-size: 64px; font-weight: 900; color: #fff; line-height: 1.2;
+    max-width: 800px; margin-bottom: 32px;
+  }
+  h1 em { font-style: normal; color: #818cf8; }
+  .features {
+    display: flex; gap: 24px; margin-top: 32px;
+  }
+  .feat {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 16px; padding: 24px 28px;
+    text-align: center;
+  }
+  .feat .icon { font-size: 36px; margin-bottom: 8px; }
+  .feat p { color: rgba(255,255,255,0.7); font-size: 22px; font-weight: 600; }
+  .punchline {
+    margin-top: 48px; color: rgba(255,255,255,0.4);
+    font-size: 28px; font-weight: 600;
+  }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="emoji">&#129302;</div>
+  <h1>Contratei um professor que trabalha <em>24 horas por dia</em></h1>
+  <div class="features">
+    <div class="feat">
+      <div class="icon">&#127769;</div>
+      <p>Madrugada</p>
+    </div>
+    <div class="feat">
+      <div class="icon">&#127774;</div>
+      <p>Feriado</p>
+    </div>
+    <div class="feat">
+      <div class="icon">&#128176;</div>
+      <p>Sem aumento</p>
+    </div>
+    <div class="feat">
+      <div class="icon">&#10084;&#65039;</div>
+      <p>Alunos amam</p>
+    </div>
+  </div>
+  <div class="punchline">E seus alunos nunca mais vao parar de praticar.</div>
+</div>
+</body>
+</html>

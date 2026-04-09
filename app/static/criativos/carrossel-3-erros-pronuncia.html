@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap');
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', sans-serif; background: #0a0a0a; display: flex; flex-wrap: wrap; gap: 24px; padding: 32px; justify-content: center; }
+  .slide {
+    width: 1080px; height: 1080px;
+    border-radius: 24px; overflow: hidden;
+    position: relative; display: flex; flex-direction: column;
+    justify-content: center; align-items: center; text-align: center;
+    padding: 80px;
+  }
+  .slide-num {
+    position: absolute; top: 40px; right: 48px;
+    color: rgba(255,255,255,0.2); font-size: 28px; font-weight: 800;
+  }
+  .tag {
+    background: rgba(129,140,248,0.15); border: 1px solid rgba(129,140,248,0.3);
+    color: #818cf8; padding: 8px 20px; border-radius: 8px;
+    font-size: 22px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.06em; margin-bottom: 36px;
+  }
+
+  /* Slide 1 - Cover */
+  .s1 { background: linear-gradient(135deg, #1e1b4b, #312e81); }
+  .s1 h1 { font-size: 72px; font-weight: 900; color: #fff; line-height: 1.15; }
+  .s1 h1 em { font-style: normal; color: #ef4444; }
+  .s1 .sub { color: rgba(255,255,255,0.5); font-size: 32px; margin-top: 24px; }
+
+  /* Error slides */
+  .error-slide { background: linear-gradient(135deg, #1e1b4b, #312e81); text-align: left; padding: 80px 96px; align-items: flex-start; }
+  .error-num { font-size: 120px; font-weight: 900; color: rgba(239,68,68,0.3); line-height: 1; margin-bottom: 16px; }
+  .error-slide h2 { font-size: 56px; font-weight: 800; color: #fff; margin-bottom: 32px; line-height: 1.2; }
+  .error-slide h2 em { font-style: normal; color: #ef4444; }
+  .phoneme-box {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 16px; padding: 32px 40px;
+    width: 100%; margin-bottom: 24px;
+  }
+  .phoneme-row { display: flex; align-items: center; gap: 24px; margin-bottom: 16px; }
+  .phoneme-row:last-child { margin-bottom: 0; }
+  .phoneme-wrong {
+    background: rgba(239,68,68,0.15); color: #ef4444;
+    padding: 8px 16px; border-radius: 8px;
+    font-size: 28px; font-weight: 700; min-width: 120px; text-align: center;
+  }
+  .phoneme-arrow { color: rgba(255,255,255,0.3); font-size: 28px; }
+  .phoneme-right {
+    background: rgba(34,197,94,0.15); color: #22c55e;
+    padding: 8px 16px; border-radius: 8px;
+    font-size: 28px; font-weight: 700; min-width: 120px; text-align: center;
+  }
+  .phoneme-word { color: rgba(255,255,255,0.6); font-size: 26px; margin-left: 16px; }
+  .tip {
+    color: rgba(255,255,255,0.6); font-size: 28px; line-height: 1.6;
+    border-left: 4px solid #818cf8; padding-left: 24px;
+  }
+  .tip strong { color: #fff; }
+
+  /* Slide 5 - CTA */
+  .s5 { background: linear-gradient(135deg, #1e1b4b, #312e81); }
+  .s5 h2 { font-size: 56px; font-weight: 800; color: #fff; margin-bottom: 24px; line-height: 1.2; }
+  .s5 h2 em { font-style: normal; color: #22c55e; }
+  .s5 .body { color: rgba(255,255,255,0.6); font-size: 32px; max-width: 700px; margin-bottom: 48px; line-height: 1.6; }
+  .s5 .cta {
+    background: #22c55e; color: #fff; font-size: 36px; font-weight: 800;
+    padding: 28px 64px; border-radius: 16px;
+  }
+</style>
+</head>
+<body>
+
+<!-- SLIDE 1: Cover -->
+<div class="slide s1">
+  <div class="slide-num">1/5</div>
+  <div class="tag">Pronuncia</div>
+  <h1>3 erros de pronuncia que<br><em>todo brasileiro</em> comete</h1>
+  <div class="sub">E que a maioria dos professores nao corrige.</div>
+</div>
+
+<!-- SLIDE 2: TH -->
+<div class="slide error-slide">
+  <div class="slide-num">2/5</div>
+  <div class="error-num">01</div>
+  <h2>O som do <em>TH</em></h2>
+  <div class="phoneme-box">
+    <div class="phoneme-row">
+      <span class="phoneme-wrong">"fink"</span>
+      <span class="phoneme-arrow">&rarr;</span>
+      <span class="phoneme-right">"think"</span>
+      <span class="phoneme-word">/&theta;/ lingua entre os dentes</span>
+    </div>
+    <div class="phoneme-row">
+      <span class="phoneme-wrong">"dis"</span>
+      <span class="phoneme-arrow">&rarr;</span>
+      <span class="phoneme-right">"this"</span>
+      <span class="phoneme-word">/&eth;/ lingua vibra nos dentes</span>
+    </div>
+  </div>
+  <div class="tip"><strong>Dica:</strong> Ponha a lingua levemente entre os dentes e sopre. Nao existe esse som em portugues.</div>
+</div>
+
+<!-- SLIDE 3: Vogais curtas -->
+<div class="slide error-slide">
+  <div class="slide-num">3/5</div>
+  <div class="error-num">02</div>
+  <h2>Vogais <em>curtas vs longas</em></h2>
+  <div class="phoneme-box">
+    <div class="phoneme-row">
+      <span class="phoneme-wrong">"beach"</span>
+      <span class="phoneme-arrow">&ne;</span>
+      <span class="phoneme-right">"bitch"</span>
+      <span class="phoneme-word">/i:/ longo vs /&iota;/ curto</span>
+    </div>
+    <div class="phoneme-row">
+      <span class="phoneme-wrong">"cat"</span>
+      <span class="phoneme-arrow">&ne;</span>
+      <span class="phoneme-right">"cut"</span>
+      <span class="phoneme-word">/&aelig;/ aberto vs /&Lambda;/ fechado</span>
+    </div>
+  </div>
+  <div class="tip"><strong>Dica:</strong> Brasileiro tende a falar todas as vogais iguais. Em ingles, a duracao e abertura mudam o significado.</div>
+</div>
+
+<!-- SLIDE 4: R americano -->
+<div class="slide error-slide">
+  <div class="slide-num">4/5</div>
+  <div class="error-num">03</div>
+  <h2>O <em>R americano</em></h2>
+  <div class="phoneme-box">
+    <div class="phoneme-row">
+      <span class="phoneme-wrong">"cah"</span>
+      <span class="phoneme-arrow">&rarr;</span>
+      <span class="phoneme-right">"car"</span>
+      <span class="phoneme-word">/&#633;/ lingua curvada pra tras</span>
+    </div>
+    <div class="phoneme-row">
+      <span class="phoneme-wrong">"worl"</span>
+      <span class="phoneme-arrow">&rarr;</span>
+      <span class="phoneme-right">"world"</span>
+      <span class="phoneme-word">/&#633;/ + /l/ combinacao dificil</span>
+    </div>
+  </div>
+  <div class="tip"><strong>Dica:</strong> O R americano nao bate na garganta como em portugues. A lingua curva pra tras sem tocar nada.</div>
+</div>
+
+<!-- SLIDE 5: CTA -->
+<div class="slide s5">
+  <div class="slide-num">5/5</div>
+  <div class="tag">Solucao</div>
+  <h2>Nosso agente detecta e corrige<br><em>todos esses erros</em></h2>
+  <div class="body">Avaliacao fonemica em tempo real. Identifica os 9 erros mais comuns de brasileiros. Automaticamente.</div>
+  <div class="cta">Agende uma demonstracao</div>
+</div>
+
+</body>
+</html>

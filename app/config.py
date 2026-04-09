@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     elevenlabs_api_key: str = ""
     elevenlabs_voice_id: str = "21m00Tcm4TlvDq8ikWAM"
     
+    # Uazapi SDR (separate WhatsApp number for sales)
+    uazapi_sdr_base_url: str = ""
+    uazapi_sdr_token: str = ""
+
     # Redis
     redis_url: str = ""
 

@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap');
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', sans-serif; background: #0a0a0a; display: flex; flex-wrap: wrap; gap: 24px; padding: 32px; justify-content: center; }
+  .slide {
+    width: 1080px; height: 1080px;
+    border-radius: 24px; overflow: hidden;
+    position: relative; display: flex; flex-direction: column;
+    justify-content: center; align-items: center; text-align: center;
+    padding: 80px;
+  }
+  .slide-num {
+    position: absolute; top: 40px; right: 48px;
+    color: rgba(255,255,255,0.2); font-size: 28px; font-weight: 800;
+  }
+  /* Slide 1 */
+  .s1 { background: linear-gradient(135deg, #1e1b4b, #312e81); }
+  .s1 h1 { font-size: 72px; font-weight: 900; color: #fff; line-height: 1.15; }
+  .s1 h1 em { font-style: normal; color: #818cf8; }
+  .s1 .sub { color: rgba(255,255,255,0.5); font-size: 32px; margin-top: 32px; }
+  /* Slide 2 */
+  .s2 { background: linear-gradient(135deg, #1e1b4b, #312e81); }
+  .s2 .big-num { font-size: 200px; font-weight: 900; color: #ef4444; line-height: 1; }
+  .s2 .big-label { font-size: 48px; font-weight: 800; color: #fff; margin-top: 16px; }
+  .s2 .detail { color: rgba(255,255,255,0.5); font-size: 32px; margin-top: 24px; max-width: 700px; }
+  /* Slide 3 */
+  .s3 { background: linear-gradient(135deg, #1e1b4b, #312e81); }
+  .s3 .stat-row { display: flex; gap: 48px; margin-bottom: 48px; }
+  .s3 .stat { text-align: center; }
+  .s3 .stat-val { font-size: 96px; font-weight: 900; color: #ef4444; }
+  .s3 .stat-label { font-size: 28px; color: rgba(255,255,255,0.6); margin-top: 8px; }
+  .s3 h2 { font-size: 52px; font-weight: 800; color: #fff; margin-top: 24px; }
+  /* Slide 4 */
+  .s4 { background: linear-gradient(135deg, #064e3b, #065f46); }
+  .s4 h2 { font-size: 56px; font-weight: 800; color: #fff; margin-bottom: 48px; line-height: 1.2; }
+  .s4 .compare { display: flex; gap: 40px; width: 100%; }
+  .s4 .col { flex: 1; border-radius: 24px; padding: 40px; text-align: left; }
+  .s4 .col-before { background: rgba(239,68,68,0.15); border: 2px solid rgba(239,68,68,0.3); }
+  .s4 .col-after { background: rgba(34,197,94,0.15); border: 2px solid rgba(34,197,94,0.3); }
+  .s4 .col h3 { font-size: 32px; font-weight: 800; margin-bottom: 24px; }
+  .s4 .col-before h3 { color: #ef4444; }
+  .s4 .col-after h3 { color: #22c55e; }
+  .s4 .col p { font-size: 28px; color: rgba(255,255,255,0.8); line-height: 1.6; margin-bottom: 12px; }
+  .s4 .col p strong { color: #fff; }
+  /* Slide 5 */
+  .s5 { background: linear-gradient(135deg, #1e1b4b, #312e81); }
+  .s5 h2 { font-size: 56px; font-weight: 800; color: #fff; margin-bottom: 20px; line-height: 1.2; }
+  .s5 h2 em { font-style: normal; color: #22c55e; }
+  .s5 .sub { color: rgba(255,255,255,0.5); font-size: 32px; margin-bottom: 48px; }
+  .s5 .cta {
+    background: #22c55e; color: #fff; font-size: 36px; font-weight: 800;
+    padding: 28px 64px; border-radius: 16px; display: inline-block;
+  }
+  .s5 .note { color: rgba(255,255,255,0.4); font-size: 24px; margin-top: 24px; }
+</style>
+</head>
+<body>
+
+<!-- SLIDE 1 -->
+<div class="slide s1">
+  <div class="slide-num">1/5</div>
+  <h1>Seu aluno so pratica ingles<br><em>2 horas por semana</em></h1>
+  <div class="sub">Voce sabe o que acontece nas outras 166 horas?</div>
+</div>
+
+<!-- SLIDE 2 -->
+<div class="slide s2">
+  <div class="slide-num">2/5</div>
+  <div class="big-num">80%</div>
+  <div class="big-label">do conteudo e esquecido</div>
+  <div class="detail">Sem pratica diaria, o cerebro descarta o que aprendeu. Seu aluno volta pra aula quase do zero.</div>
+</div>
+
+<!-- SLIDE 3 -->
+<div class="slide s3">
+  <div class="slide-num">3/5</div>
+  <div class="stat-row">
+    <div class="stat">
+      <div class="stat-val">3</div>
+      <div class="stat-label">meses</div>
+    </div>
+    <div class="stat">
+      <div class="stat-val">=</div>
+      <div class="stat-label"></div>
+    </div>
+    <div class="stat">
+      <div class="stat-val">desistencia</div>
+      <div class="stat-label">do aluno medio</div>
+    </div>
+  </div>
+  <h2>Sem evolucao, ele cancela.</h2>
+</div>
+
+<!-- SLIDE 4 -->
+<div class="slide s4">
+  <div class="slide-num">4/5</div>
+  <h2>E se ele praticasse<br>todo dia no WhatsApp?</h2>
+  <div class="compare">
+    <div class="col col-before">
+      <h3>Sem IA</h3>
+      <p><strong>2h</strong> por semana</p>
+      <p>So pratica na aula</p>
+      <p>Esquece entre as aulas</p>
+      <p>Desiste em 3 meses</p>
+    </div>
+    <div class="col col-after">
+      <h3>Com IA</h3>
+      <p><strong>5.5h</strong> por semana</p>
+      <p>Pratica todo dia</p>
+      <p>Evolui continuamente</p>
+      <p>Fica por anos</p>
+    </div>
+  </div>
+</div>
+
+<!-- SLIDE 5 -->
+<div class="slide s5">
+  <div class="slide-num">5/5</div>
+  <h2>Seus alunos praticando ingles<br><em>todo dia, no WhatsApp</em></h2>
+  <div class="sub">Com um tutor de IA que conversa, corrige e engaja.</div>
+  <div class="cta">Agende uma demonstracao</div>
+  <div class="note">Link na bio</div>
+</div>
+
+</body>
+</html>
