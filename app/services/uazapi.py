@@ -7,10 +7,10 @@ from app.config import get_settings
 
 
 class UazapiService:
-    def __init__(self):
+    def __init__(self, base_url: str = None, token: str = None):
         settings = get_settings()
-        self.base_url = settings.uazapi_base_url.rstrip("/")
-        self.token = settings.uazapi_token
+        self.base_url = (base_url or settings.uazapi_base_url).rstrip("/")
+        self.token = token or settings.uazapi_token
         self.headers = {"token": self.token}
     
     async def download_media(self, message_id: str, generate_mp3: bool = False) -> tuple[bytes, str]:
@@ -130,6 +130,31 @@ class UazapiService:
             response.raise_for_status()
             return response.json()
     
+    async def send_poll(
+        self,
+        phone: str,
+        question: str,
+        options: list[str],
+        selectable_count: int = 1,
+    ) -> dict:
+        """Envia enquete/poll interativa no WhatsApp via /send/menu type poll."""
+        payload = {
+            "number": phone,
+            "type": "poll",
+            "name": question,
+            "options": options,
+            "selectableCount": selectable_count,
+        }
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                f"{self.base_url}/send/menu",
+                headers=self.headers,
+                json=payload,
+            )
+            response.raise_for_status()
+            return response.json()
+
     async def send_presence(self, phone: str, presence: str = "recording"):
         """
         Envia indicador de presença (digitando ou gravando)

@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tutor de Ingles por IA no WhatsApp — Para Escolas de Idiomas</title>
+<meta name="description" content="Seus alunos praticando ingles todo dia no WhatsApp com IA. Agende uma demonstracao gratuita.">
+<meta property="og:title" content="Tutor de Ingles por IA no WhatsApp">
+<meta property="og:description" content="Seus alunos praticando ingles todo dia no WhatsApp com IA. Agende uma demonstracao.">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="pt_BR">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f172a;
+    --surface: #1e293b;
+    --border: #334155;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --primary: #3b82f6;
+    --primary-hover: #2563eb;
+    --primary-glow: rgba(59,130,246,0.15);
+    --whatsapp: #25D366;
+    --whatsapp-hover: #1ebe5a;
+    --success: #22c55e;
+    --accent: #8b5cf6;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    line-height: 1.6;
+    overflow: hidden;
+  }
+
+  .page {
+    width: 100%;
+    max-width: 560px;
+    position: relative;
+  }
+
+  /* Progress bar */
+  .progress-bar {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 4px;
+    background: var(--surface);
+    z-index: 10;
+  }
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--primary), var(--accent));
+    transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    width: 0%;
+    border-radius: 0 2px 2px 0;
+  }
+
+  /* Step counter */
+  .step-counter {
+    position: fixed;
+    top: 20px; right: 28px;
+    color: var(--muted);
+    font-size: 0.82rem;
+    font-weight: 600;
+    z-index: 10;
+  }
+
+  /* Steps */
+  .step {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    opacity: 0;
+    transform: translateY(40px);
+    transition: opacity 0.5s ease, transform 0.5s ease;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+  }
+  .step.active {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: all;
+    position: relative;
+  }
+  .step.exit-up {
+    opacity: 0;
+    transform: translateY(-40px);
+    pointer-events: none;
+  }
+
+  /* Question */
+  .step-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--primary);
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 12px;
+  }
+  .step-label .num {
+    background: var(--primary-glow);
+    width: 28px; height: 28px;
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.82rem;
+  }
+  .step h2 {
+    font-size: clamp(1.4rem, 4vw, 1.9rem);
+    font-weight: 800;
+    line-height: 1.25;
+    margin-bottom: 8px;
+  }
+  .step .hint {
+    color: var(--muted);
+    font-size: 0.9rem;
+    margin-bottom: 28px;
+  }
+
+  /* Input styles */
+  .input-text {
+    width: 100%;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid var(--border);
+    color: var(--text);
+    padding: 14px 0;
+    font-size: 1.3rem;
+    font-family: inherit;
+    font-weight: 500;
+    transition: border-color 0.3s;
+    outline: none;
+  }
+  .input-text:focus {
+    border-bottom-color: var(--primary);
+  }
+  .input-text::placeholder {
+    color: #3d4a5c;
+    font-weight: 400;
+  }
+
+  /* Option cards (for select-like fields) */
+  .options {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .option-card {
+    background: var(--surface);
+    border: 2px solid var(--border);
+    border-radius: 14px;
+    padding: 16px 20px;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s, transform 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    font-size: 1rem;
+    font-weight: 500;
+  }
+  .option-card:hover {
+    border-color: var(--primary);
+    transform: translateX(4px);
+  }
+  .option-card.selected {
+    border-color: var(--primary);
+    background: var(--primary-glow);
+  }
+  .option-letter {
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    border: 2px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.82rem; font-weight: 700;
+    color: var(--muted);
+    flex-shrink: 0;
+    transition: border-color 0.2s, color 0.2s, background 0.2s;
+  }
+  .option-card:hover .option-letter,
+  .option-card.selected .option-letter {
+    border-color: var(--primary);
+    color: var(--primary);
+    background: var(--primary-glow);
+  }
+
+  /* Buttons */
+  .btn-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 32px;
+  }
+  .btn-next {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--primary);
+    color: #fff;
+    border: none;
+    padding: 14px 28px;
+    border-radius: 10px;
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.2s, transform 0.15s;
+  }
+  .btn-next:hover { background: var(--primary-hover); transform: translateY(-1px); }
+  .btn-next:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+  .btn-next svg { width: 18px; height: 18px; fill: currentColor; }
+
+  .enter-hint {
+    color: var(--muted);
+    font-size: 0.8rem;
+  }
+  .enter-hint kbd {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 0.75rem;
+  }
+
+  .btn-submit {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--whatsapp);
+    color: #fff;
+    border: none;
+    padding: 16px 36px;
+    border-radius: 12px;
+    font-size: 1.1rem;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.2s, transform 0.15s;
+    box-shadow: 0 4px 20px rgba(37,211,102,0.3);
+  }
+  .btn-submit:hover { background: var(--whatsapp-hover); transform: translateY(-2px); }
+  .btn-submit:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+  /* Success screen */
+  .success-screen {
+    text-align: center;
+  }
+  .success-icon {
+    width: 80px; height: 80px;
+    border-radius: 50%;
+    background: rgba(34,197,94,0.12);
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 24px;
+    font-size: 2.5rem;
+    animation: pop 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  }
+  @keyframes pop {
+    0% { transform: scale(0); }
+    100% { transform: scale(1); }
+  }
+  .success-screen h2 {
+    font-size: 1.6rem; font-weight: 800; margin-bottom: 12px;
+    color: var(--success);
+  }
+  .success-screen p {
+    color: var(--muted); font-size: 1.05rem; line-height: 1.6;
+    max-width: 400px; margin: 0 auto;
+  }
+  .success-screen .whatsapp-badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: rgba(37,211,102,0.1); border: 1px solid rgba(37,211,102,0.3);
+    color: var(--whatsapp); padding: 12px 24px; border-radius: 12px;
+    font-weight: 700; font-size: 1rem; margin-top: 28px;
+  }
+  .success-screen .whatsapp-badge svg { width: 22px; height: 22px; fill: var(--whatsapp); }
+
+  /* Intro screen */
+  .intro h1 {
+    font-size: clamp(1.6rem, 5vw, 2.2rem);
+    font-weight: 800;
+    line-height: 1.2;
+    margin-bottom: 12px;
+  }
+  .intro h1 em {
+    font-style: normal;
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .intro p {
+    color: var(--muted);
+    font-size: 1rem;
+    margin-bottom: 36px;
+    max-width: 440px;
+  }
+  .intro .badge {
+    display: inline-block;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--primary);
+    padding: 5px 14px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    margin-bottom: 20px;
+  }
+  .intro .start-btn {
+    display: inline-flex; align-items: center; gap: 10px;
+    background: var(--primary); color: #fff;
+    border: none; padding: 16px 36px;
+    border-radius: 12px; font-size: 1.1rem; font-weight: 700;
+    cursor: pointer; font-family: inherit;
+    transition: background 0.2s, transform 0.15s;
+  }
+  .intro .start-btn:hover { background: var(--primary-hover); transform: translateY(-2px); }
+  .intro .time-note {
+    color: var(--muted); font-size: 0.82rem; margin-top: 14px;
+  }
+
+  @media (max-width: 480px) {
+    body { padding: 20px 16px; }
+    .step h2 { font-size: 1.3rem; }
+    .input-text { font-size: 1.1rem; }
+    .btn-next { padding: 12px 24px; }
+    .enter-hint { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="progress-bar"><div class="progress-fill" id="progress"></div></div>
+<div class="step-counter" id="step-counter"></div>
+
+<div class="page" id="form-page">
+
+  <!-- STEP 0: Intro -->
+  <div class="step active intro" data-step="0">
+    <div class="badge">DEMONSTRACAO GRATUITA</div>
+    <h1>Tutor de ingles por <em>IA no WhatsApp</em> dos seus alunos</h1>
+    <p>Responda algumas perguntas rapidas e agende uma demonstracao personalizada para sua escola.</p>
+    <button class="start-btn" onclick="goTo(1)">
+      Comecar &rarr;
+    </button>
+    <div class="time-note">Leva menos de 1 minuto</div>
+  </div>
+
+  <!-- STEP 1: Nome -->
+  <div class="step" data-step="1">
+    <div class="step-label"><span class="num">1</span> SOBRE VOCE</div>
+    <h2>Qual e o seu nome?</h2>
+    <div class="hint"></div>
+    <input type="text" class="input-text" id="f-name" placeholder="Digite seu nome" autofocus
+           onkeydown="if(event.key==='Enter'){event.preventDefault();nextIfValid()}">
+    <div class="btn-row">
+      <button class="btn-next" onclick="nextIfValid()">OK <svg viewBox="0 0 24 24"><path d="M5 13h11.17l-4.88 4.88c-.39.39-.39 1.03 0 1.42.39.39 1.02.39 1.41 0l6.59-6.59a.996.996 0 000-1.41l-6.58-6.6a.996.996 0 10-1.41 1.41L16.17 11H5c-.55 0-1 .45-1 1s.45 1 1 1z"/></svg></button>
+      <span class="enter-hint">aperte <kbd>Enter</kbd></span>
+    </div>
+  </div>
+
+  <!-- STEP 2: WhatsApp -->
+  <div class="step" data-step="2">
+    <div class="step-label"><span class="num">2</span> CONTATO</div>
+    <h2>Qual seu WhatsApp?</h2>
+    <div class="hint">Vamos te chamar por la em minutos.</div>
+    <input type="tel" class="input-text" id="f-phone" placeholder="(11) 99999-9999"
+           onkeydown="if(event.key==='Enter'){event.preventDefault();nextIfValid()}">
+    <div class="btn-row">
+      <button class="btn-next" onclick="nextIfValid()">OK <svg viewBox="0 0 24 24"><path d="M5 13h11.17l-4.88 4.88c-.39.39-.39 1.03 0 1.42.39.39 1.02.39 1.41 0l6.59-6.59a.996.996 0 000-1.41l-6.58-6.6a.996.996 0 10-1.41 1.41L16.17 11H5c-.55 0-1 .45-1 1s.45 1 1 1z"/></svg></button>
+      <span class="enter-hint">aperte <kbd>Enter</kbd></span>
+    </div>
+  </div>
+
+  <!-- STEP 3: Tipo -->
+  <div class="step" data-step="3">
+    <div class="step-label"><span class="num">3</span> SEU PERFIL</div>
+    <h2>Qual dessas opcoes te descreve melhor?</h2>
+    <div class="hint"></div>
+    <div class="options">
+      <div class="option-card" onclick="selectOption(this,'school_owner')">
+        <span class="option-letter">A</span> Dono(a) de escola de idiomas
+      </div>
+      <div class="option-card" onclick="selectOption(this,'coordinator')">
+        <span class="option-letter">B</span> Coordenador(a) pedagogico(a)
+      </div>
+      <div class="option-card" onclick="selectOption(this,'independent_teacher')">
+        <span class="option-letter">C</span> Professor(a) autonomo(a)
+      </div>
+      <div class="option-card" onclick="selectOption(this,'other')">
+        <span class="option-letter">D</span> Outro
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 4: Qtd alunos -->
+  <div class="step" data-step="4">
+    <div class="step-label"><span class="num">4</span> SUA ESCOLA</div>
+    <h2>Quantos alunos voce tem hoje?</h2>
+    <div class="hint">Aproximado, sem problema.</div>
+    <input type="number" class="input-text" id="f-students" placeholder="Ex: 50" min="1"
+           onkeydown="if(event.key==='Enter'){event.preventDefault();nextIfValid()}">
+    <div class="btn-row">
+      <button class="btn-next" onclick="nextIfValid()">OK <svg viewBox="0 0 24 24"><path d="M5 13h11.17l-4.88 4.88c-.39.39-.39 1.03 0 1.42.39.39 1.02.39 1.41 0l6.59-6.59a.996.996 0 000-1.41l-6.58-6.6a.996.996 0 10-1.41 1.41L16.17 11H5c-.55 0-1 .45-1 1s.45 1 1 1z"/></svg></button>
+      <span class="enter-hint">aperte <kbd>Enter</kbd></span>
+    </div>
+  </div>
+
+  <!-- STEP 5: Nome da escola -->
+  <div class="step" data-step="5">
+    <div class="step-label"><span class="num">5</span> SUA ESCOLA</div>
+    <h2>Qual o nome da sua escola?</h2>
+    <div class="hint">Se for autonomo(a), pode pular.</div>
+    <input type="text" class="input-text" id="f-school" placeholder="Ex: English House"
+           onkeydown="if(event.key==='Enter'){event.preventDefault();nextIfValid()}">
+    <div class="btn-row">
+      <button class="btn-next" onclick="nextIfValid()">OK <svg viewBox="0 0 24 24"><path d="M5 13h11.17l-4.88 4.88c-.39.39-.39 1.03 0 1.42.39.39 1.02.39 1.41 0l6.59-6.59a.996.996 0 000-1.41l-6.58-6.6a.996.996 0 10-1.41 1.41L16.17 11H5c-.55 0-1 .45-1 1s.45 1 1 1z"/></svg></button>
+      <span class="enter-hint">aperte <kbd>Enter</kbd></span>
+    </div>
+  </div>
+
+  <!-- STEP 6: Maior desafio -->
+  <div class="step" data-step="6">
+    <div class="step-label"><span class="num">6</span> SEU DESAFIO</div>
+    <h2>Qual seu maior desafio hoje?</h2>
+    <div class="hint"></div>
+    <div class="options">
+      <div class="option-card" onclick="selectOption(this,'retention')">
+        <span class="option-letter">A</span> Alunos desistindo
+      </div>
+      <div class="option-card" onclick="selectOption(this,'engagement')">
+        <span class="option-letter">B</span> Pouca pratica entre as aulas
+      </div>
+      <div class="option-card" onclick="selectOption(this,'competition')">
+        <span class="option-letter">C</span> Concorrencia com apps gratuitos
+      </div>
+      <div class="option-card" onclick="selectOption(this,'acquisition')">
+        <span class="option-letter">D</span> Captacao de novos alunos
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 7: Submit -->
+  <div class="step" data-step="7">
+    <div class="step-label"><span class="num">&#10003;</span> TUDO PRONTO</div>
+    <h2>Perfeito, <span id="display-name">!</span></h2>
+    <div class="hint">Clique abaixo e nossa equipe vai te chamar no WhatsApp para agendar sua demonstracao.</div>
+    <button class="btn-submit" id="btn-submit" onclick="submitForm()">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="#fff"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+      Agendar minha demonstracao
+    </button>
+  </div>
+
+  <!-- STEP 8: Success -->
+  <div class="step success-screen" data-step="8">
+    <div class="success-icon">&#10003;</div>
+    <h2>Dados recebidos!</h2>
+    <p>Em instantes vamos te chamar no WhatsApp para agendar sua demonstracao personalizada.</p>
+    <div class="whatsapp-badge">
+      <svg viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+      Fique de olho no seu WhatsApp!
+    </div>
+  </div>
+
+</div>
+
+<script>
+const TOTAL_STEPS = 7;
+let current = 0;
+const formData = {};
+
+function updateProgress() {
+  const pct = Math.round((current / TOTAL_STEPS) * 100);
+  document.getElementById('progress').style.width = pct + '%';
+  document.getElementById('step-counter').textContent = current > 0 && current <= TOTAL_STEPS
+    ? current + ' / ' + TOTAL_STEPS : '';
+}
+
+function goTo(n) {
+  const steps = document.querySelectorAll('.step');
+  steps.forEach(s => {
+    const si = parseInt(s.dataset.step);
+    if (si === current) {
+      s.classList.remove('active');
+      s.classList.add('exit-up');
+    } else if (si === n) {
+      s.classList.remove('exit-up');
+      // Slight delay for animation
+      setTimeout(() => {
+        s.classList.add('active');
+        // Focus input if exists
+        const inp = s.querySelector('.input-text');
+        if (inp) setTimeout(() => inp.focus(), 100);
+      }, 50);
+    } else {
+      s.classList.remove('active', 'exit-up');
+    }
+  });
+  current = n;
+  updateProgress();
+
+  // Set name on final step
+  if (n === 7 && formData.name) {
+    document.getElementById('display-name').textContent = formData.name.split(' ')[0] + '!';
+  }
+}
+
+function nextIfValid() {
+  if (current === 1) {
+    const v = document.getElementById('f-name').value.trim();
+    if (!v) return;
+    formData.name = v;
+    goTo(2);
+  } else if (current === 2) {
+    const v = document.getElementById('f-phone').value.trim();
+    if (v.replace(/\D/g, '').length < 10) return;
+    formData.phone = v.replace(/\D/g, '');
+    goTo(3);
+  } else if (current === 4) {
+    const v = document.getElementById('f-students').value;
+    formData.student_count = parseInt(v) || null;
+    goTo(5);
+  } else if (current === 5) {
+    formData.school_name = document.getElementById('f-school').value.trim();
+    goTo(6);
+  }
+}
+
+function selectOption(el, value) {
+  // Highlight
+  el.parentElement.querySelectorAll('.option-card').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+
+  // Save & advance after short delay
+  setTimeout(() => {
+    if (current === 3) {
+      formData.type = value;
+      goTo(4);
+    } else if (current === 6) {
+      formData.main_pain = value;
+      goTo(7);
+    }
+  }, 300);
+}
+
+async function submitForm() {
+  const btn = document.getElementById('btn-submit');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner" style="display:inline-block;width:18px;height:18px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin 0.6s linear infinite"></span> Enviando...';
+
+  const payload = {
+    name: formData.name || '',
+    phone: formData.phone || '',
+    type: formData.type || 'other',
+    school_name: formData.school_name || '',
+    student_count: formData.student_count || null,
+    main_pain: formData.main_pain || null,
+  };
+
+  try {
+    const res = await fetch('/api/leads', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error('Erro');
+    goTo(8);
+  } catch (err) {
+    alert('Erro ao enviar. Tente novamente.');
+    btn.disabled = false;
+    btn.innerHTML = 'Agendar minha demonstracao';
+  }
+}
+
+// Phone mask
+document.getElementById('f-phone').addEventListener('input', function(e) {
+  let v = e.target.value.replace(/\D/g, '');
+  if (v.length > 11) v = v.slice(0, 11);
+  if (v.length > 6) v = '(' + v.slice(0,2) + ') ' + v.slice(2,7) + '-' + v.slice(7);
+  else if (v.length > 2) v = '(' + v.slice(0,2) + ') ' + v.slice(2);
+  else if (v.length > 0) v = '(' + v;
+  e.target.value = v;
+});
+
+// Keyboard shortcuts (A, B, C, D for options)
+document.addEventListener('keydown', function(e) {
+  if (current === 3 || current === 6) {
+    const step = document.querySelector('.step.active');
+    if (!step) return;
+    const cards = step.querySelectorAll('.option-card');
+    const map = { a: 0, b: 1, c: 2, d: 3 };
+    const idx = map[e.key.toLowerCase()];
+    if (idx !== undefined && cards[idx]) cards[idx].click();
+  }
+});
+
+// Init
+updateProgress();
+</script>
+
+</body>
+</html>

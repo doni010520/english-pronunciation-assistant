@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap');
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', sans-serif; background: #0a0a0a; display: flex; justify-content: center; padding: 32px; }
+  .card {
+    width: 1080px; height: 1080px;
+    background: linear-gradient(150deg, #064e3b 0%, #0f172a 100%);
+    border-radius: 24px; overflow: hidden;
+    position: relative; display: flex; flex-direction: column;
+    justify-content: center; align-items: center; text-align: center;
+    padding: 72px;
+  }
+  .tag {
+    background: rgba(34,197,94,0.15); border: 1px solid rgba(34,197,94,0.3);
+    color: #22c55e; padding: 8px 20px; border-radius: 8px;
+    font-size: 22px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.06em; margin-bottom: 36px;
+  }
+  h1 {
+    font-size: 56px; font-weight: 900; color: #fff; line-height: 1.2;
+    margin-bottom: 48px;
+  }
+  h1 em { font-style: normal; color: #22c55e; }
+
+  .chat {
+    background: #0b1420;
+    border: 2px solid rgba(255,255,255,0.1);
+    border-radius: 24px;
+    padding: 36px 40px;
+    width: 100%;
+    max-width: 780px;
+    display: flex; flex-direction: column; gap: 16px;
+  }
+  .msg {
+    max-width: 80%; padding: 16px 22px;
+    border-radius: 18px; font-size: 28px; line-height: 1.5;
+  }
+  .msg-student {
+    align-self: flex-end;
+    background: #005c4b; color: #e2e8f0;
+    border-bottom-right-radius: 6px;
+  }
+  .msg-agent {
+    align-self: flex-start;
+    background: #1e293b; color: #e2e8f0;
+    border-bottom-left-radius: 6px;
+  }
+  .error {
+    text-decoration: underline wavy #ef4444;
+    text-decoration-skip-ink: none;
+    text-underline-offset: 4px;
+  }
+  .correction { color: #22c55e; font-weight: 700; }
+  .arrow {
+    align-self: center;
+    font-size: 36px; color: rgba(255,255,255,0.2);
+  }
+  .caption {
+    margin-top: 36px;
+    color: rgba(255,255,255,0.5);
+    font-size: 28px; font-weight: 600;
+    max-width: 600px;
+  }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="tag">Como funciona</div>
+  <h1>O agente corrigiu o aluno<br><em>sem ele perceber</em></h1>
+  <div class="chat">
+    <div class="msg msg-student">I <span class="error">goed</span> to the store yesterday</div>
+    <div class="msg msg-agent">Oh you <span class="correction">went</span> to the store? Nice! What did you get?</div>
+    <div class="msg msg-student">I <span class="error">buyed</span> some fruits</div>
+    <div class="msg msg-agent">You <span class="correction">bought</span> fruits! Healthy choice! What's your favorite?</div>
+  </div>
+  <div class="caption">Correcao natural. Sem constrangimento. A conversa nunca para.</div>
+</div>
+</body>
+</html>
