@@ -141,8 +141,8 @@ class UazapiService:
         payload = {
             "number": phone,
             "type": "poll",
-            "name": question,
-            "options": options,
+            "text": question,      
+            "choices": options,    
             "selectableCount": selectable_count,
         }
 
