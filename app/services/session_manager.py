@@ -107,7 +107,18 @@ class SessionManager:
             focus=row["focus"],
             updated_at=updated_at,
         )
-
+  
+    async def get_user_language(self, phone: str) -> str:
+        """Retorna o idioma do usuário (default: en-US)."""
+        result = await self._db.table("users").select("language").eq("phone", phone).execute()
+        if result.data and result.data[0].get("language"):
+            return result.data[0]["language"]
+        return "en-US"
+    
+    async def set_user_language(self, phone: str, language: str):
+        """Define o idioma do usuário."""
+        await self._db.table("users").update({"language": language}).eq("phone", phone).execute()
+        
     async def create_session(
         self,
         phone: str,
