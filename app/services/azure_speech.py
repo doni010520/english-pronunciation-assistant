@@ -19,25 +19,26 @@ class AzureSpeechService:
         self.speech_key = settings.azure_speech_key
         self.speech_region = settings.azure_speech_region
     
-    def _create_speech_config(self) -> speechsdk.SpeechConfig:
+    def _create_speech_config(self, language: str = "en-US") -> speechsdk.SpeechConfig:
         """Cria configuração do Azure Speech"""
         config = speechsdk.SpeechConfig(
             subscription=self.speech_key,
             region=self.speech_region
         )
-        config.speech_recognition_language = "en-US"
+        config.speech_recognition_language = language
         return config
     
     def _assess_pronunciation_sync(
         self, 
         audio_path: str, 
-        reference_text: str
+        reference_text: str,
+        language: str = "en-US"
     ) -> dict:
         """
         Avalia pronúncia de forma síncrona (chamado via executor)
         """
-        speech_config = self._create_speech_config()
-        
+        speech_config = self._create_speech_config(language)
+
         # Configurar áudio do arquivo
         audio_config = speechsdk.audio.AudioConfig(filename=audio_path)
         
@@ -129,7 +130,8 @@ class AzureSpeechService:
         self, 
         audio_bytes: bytes, 
         reference_text: str,
-        audio_format: str = "ogg"
+        audio_format: str = "ogg",
+        language: str = "en-US"
     ) -> PronunciationResult:
         """
         Avalia pronúncia de um áudio
@@ -157,7 +159,8 @@ class AzureSpeechService:
                 _executor,
                 self._assess_pronunciation_sync,
                 wav_path,
-                reference_text
+                reference_text,
+                language
             )
             
             if not result["success"]:
