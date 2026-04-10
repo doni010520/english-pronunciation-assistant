@@ -170,6 +170,24 @@ AGENT_TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "set_language",
+            "description": "Sets the target language for practice. Use when the student wants to practice French instead of English, or switch back to English.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "language": {
+                        "type": "string",
+                        "enum": ["en-US", "fr-FR"],
+                        "description": "The language to practice. en-US for English, fr-FR for French.",
+                    }
+                },
+                "required": ["language"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "show_progress",
             "description": "Shows the student's learning progress and statistics. Use when the student asks how they're doing, their score, progress, or stats.",
             "parameters": {"type": "object", "properties": {}, "required": []},
@@ -356,6 +374,12 @@ class ConversationalAgent:
     async def _execute_tool(self, phone: str, tool_name: str, args: dict) -> str:
         """Executa uma tool e retorna o resultado como string."""
         sm = self._session_manager
+
+        if tool_name == "set_language":
+            language = args["language"]
+            await sm.set_user_language(phone, language)
+            lang_name = "French" if language == "fr-FR" else "English"
+            return json.dumps({"language": language, "name": lang_name, "updated": True})
 
         if tool_name == "give_practice_phrase":
             focus = args.get("focus", "general")
