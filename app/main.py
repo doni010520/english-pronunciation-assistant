@@ -251,13 +251,13 @@ async def _flush_buffer(phone: str):
                     try:
                         fmt = "ogg" if "ogg" in msg["audio_mimetype"] else "mp3" if "mp3" in msg["audio_mimetype"] else "ogg"
                         # Detectar idioma (exemplo simples)
-                        user_language = await sm.session_manager.get_user_language(phone) or "en-US"
+                        user_language = await sm.session_manager.get_user_language(phone)
                         
                         pron_result = await azure_service.assess_pronunciation(
                             audio_bytes=msg["audio_bytes"],
                             reference_text=transcription,
                             audio_format=fmt,
-                            language=user_language,  # "en-US" ou "fr-FR"
+                            language=user_language,
                         )
                         analysis = error_analyzer.analyze(pron_result)
                         gross_errors = [
