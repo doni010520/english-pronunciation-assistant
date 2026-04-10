@@ -305,7 +305,7 @@ async def _flush_buffer(phone: str):
         if has_audio:
             await _send_voice_parts(phone, reply)
         else:
-            await uazapi_service.send_text(phone, reply, reply_to=last_message_id)
+            await _send_text_parts(phone, reply, reply_to=last_message_id)
 
         logger.info(f"Resposta enviada para {phone}")
 
@@ -348,7 +348,39 @@ async def _send_voice_parts(phone: str, text: str):
         if clean:
             await uazapi_service.send_presence(phone, "recording")
             await _send_voice_reply(phone, clean)
-
+async def _send_text_parts(phone: str, text: str, reply_to: str = None):
+    """Divide a resposta em partes e envia cada uma como mensagem separada."""
+    import re
+    
+    # Remove asteriscos (markdown bold)
+    clean = text.replace('*', '')
+    
+    # Divide por pontuação final seguida de espaço
+    # Similar ao n8n: (?<=[?!.])\\s+
+    parts = re.split(r'(?<=[?!.])\s+', clean)
+    
+    # Remove partes vazias e faz trim
+    parts = [p.strip() for p in parts if p.strip()]
+    
+    # Se não dividiu nada, envia o original
+    if not parts:
+        parts = [clean.strip()]
+    
+    # Se tem só 1 parte, envia direto sem delay
+    if len(parts) == 1:
+        await uazapi_service.send_text(phone, parts[0], reply_to=reply_to)
+        return
+    
+    # Envia cada parte com delay de 3 segundos entre elas
+    for i, part in enumerate(parts):
+        # Só o primeiro responde à mensagem original
+        rid = reply_to if i == 0 else None
+        await uazapi_service.send_text(phone, part, reply_to=rid)
+        
+        # Delay entre mensagens (não espera após a última)
+        if i < len(parts) - 1:
+            await uazapi_service.send_presence(phone, "composing")
+            await asyncio.sleep(2)
 
 async def _transcribe_audio(audio_bytes: bytes, mimetype: str) -> str:
     """Transcreve áudio usando OpenAI Whisper."""
