@@ -406,16 +406,16 @@ class ConversationalAgent:
             ).execute()
 
     async def _save_pending_quiz_batch(self, phone: str, quizzes: list):
-    """Salva múltiplos quizzes pendentes para comparar com respostas do aluno."""
-    await self._db.table("pending_quizzes").upsert(
-        {
-            "phone": phone,
-            "quizzes": quizzes,
-            "total": len(quizzes),
-            "answered": 0,
-        },
-        on_conflict="phone"
-    ).execute()
+        """Salva múltiplos quizzes pendentes para comparar com respostas do aluno."""
+        await self._db.table("pending_quizzes").upsert(
+            {
+                "phone": phone,
+                "quizzes": quizzes,
+                "total": len(quizzes),
+                "answered": 0,
+            },
+            on_conflict="phone"
+        ).execute()
 
     # --------------------------------------------------
     # Tool execution
