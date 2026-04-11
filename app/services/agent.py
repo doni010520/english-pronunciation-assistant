@@ -472,6 +472,14 @@ class ConversationalAgent:
             # Executar tool
             tool_result = await self._execute_tool(phone, tool_name, tool_args)
 
+            messages.append(response.choices[0].message)
+
+            messages.append({
+                "role": "tool",
+                "tool_call_id": tool_call.id,
+                "content": str(tool_result)
+            })
+
             # Segunda chamada ao GPT com resultado da tool
             messages.append(assistant_msg.model_dump())
             messages.append(
