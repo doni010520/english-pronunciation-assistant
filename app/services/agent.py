@@ -237,7 +237,8 @@ AGENT_TOOLS = [
                 "Sends an interactive WhatsApp poll/quiz to the student. "
                 "Use to gamify learning: vocabulary, grammar, complete-the-sentence, pronunciation awareness, idioms. "
                 "Use naturally every 5-8 messages or when the student seems disengaged, asks to play, or after a correction opportunity. "
-                "Keep it fun and conversational — not like a classroom test."
+                "Keep it fun and conversational — not like a classroom test. "
+                "IMPORTANT: After sending, do NOT repeat the question or options in your text response - they are already visible in the poll widget."
             ),
             "parameters": {
                 "type": "object",
