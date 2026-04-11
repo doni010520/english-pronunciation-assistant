@@ -392,17 +392,18 @@ class ConversationalAgent:
         # Reverter para ordem cronológica
         messages = [{"role": r["role"], "content": r["content"]} for r in reversed(result.data)]
         return messages
-
-    async def _save_message(self, phone: str, role: str, content: str, metadata: dict = None):
-        """Salva uma mensagem no histórico."""
-        await self._db.table("conversation_history").insert(
-            {
-                "phone": phone,
-                "role": role,
-                "content": content,
-                "metadata": metadata or {},
-            }
-        ).execute()
+        
+        async def _save_pending_quiz_batch(self, phone: str, quizzes: list):
+            """Salva múltiplos quizzes pendentes para comparar com respostas do aluno."""
+            await self._db.table("pending_quizzes").upsert(
+                {
+                    "phone": phone,
+                    "quizzes": quizzes,
+                    "total": len(quizzes),
+                    "answered": 0,
+                },
+                on_conflict="phone"
+            ).execute()
 
     async def _save_pending_quiz_batch(self, phone: str, quizzes: list):
     """Salva múltiplos quizzes pendentes para comparar com respostas do aluno."""
