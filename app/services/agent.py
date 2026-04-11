@@ -460,7 +460,7 @@ class ConversationalAgent:
                     return json.dumps({"sent": False, "error": str(e)})
             return json.dumps({"sent": False, "error": "Uazapi service not available"})
 
-            if tool_name == "send_quiz_batch":
+        if tool_name == "send_quiz_batch":
             quizzes = args.get("quizzes", [])
             if not self._uazapi:
                 return json.dumps({"sent": False, "error": "Uazapi service not available"})
