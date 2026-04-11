@@ -392,18 +392,17 @@ class ConversationalAgent:
         # Reverter para ordem cronológica
         messages = [{"role": r["role"], "content": r["content"]} for r in reversed(result.data)]
         return messages
-        
-        async def _save_pending_quiz_batch(self, phone: str, quizzes: list):
-            """Salva múltiplos quizzes pendentes para comparar com respostas do aluno."""
-            await self._db.table("pending_quizzes").upsert(
-                {
-                    "phone": phone,
-                    "quizzes": quizzes,
-                    "total": len(quizzes),
-                    "answered": 0,
-                },
-                on_conflict="phone"
-            ).execute()
+
+    async def _save_message(self, phone: str, role: str, content: str, metadata: dict = None):
+        """Salva uma mensagem no histórico."""
+        await self._db.table("conversation_history").insert(
+            {
+                "phone": phone,
+                "role": role,
+                "content": content,
+                "metadata": metadata or {},
+            }
+        ).execute()
 
     async def _save_pending_quiz_batch(self, phone: str, quizzes: list):
         """Salva múltiplos quizzes pendentes para comparar com respostas do aluno."""
@@ -477,19 +476,19 @@ class ConversationalAgent:
             quizzes = args.get("quizzes", [])
             if not self._uazapi:
                 return json.dumps({"sent": False, "error": "Uazapi service not available"})
-            
+
             sent_count = 0
             all_correct_answers = []
-            
+
             for quiz in quizzes:
                 question = quiz["question"]
                 options = quiz["options"]
                 correct_indices = quiz.get("correct_indices", [0])
                 selectable_count = quiz.get("selectable_count", 1)
-                
+
                 if isinstance(correct_indices, int):
                     correct_indices = [correct_indices]
-                
+
                 try:
                     await self._uazapi.send_poll(
                         phone=phone,
@@ -505,10 +504,10 @@ class ConversationalAgent:
                     })
                 except Exception as e:
                     logger.error(f"Failed to send poll in batch: {e}")
-            
+
             # Salvar todos os quizzes pendentes
             await self._save_pending_quiz_batch(phone, all_correct_answers)
-            
+
             return json.dumps({
                 "sent": True,
                 "count": sent_count,
@@ -564,14 +563,6 @@ class ConversationalAgent:
             # Executar tool
             tool_result = await self._execute_tool(phone, tool_name, tool_args)
 
-            messages.append(response.choices[0].message)
-
-            messages.append({
-                "role": "tool",
-                "tool_call_id": tool_call.id,
-                "content": str(tool_result)
-            })
-
             # Segunda chamada ao GPT com resultado da tool
             # Incluir apenas o tool_call que estamos respondendo (evita erro se GPT retornar múltiplos)
             messages.append({
@@ -588,13 +579,11 @@ class ConversationalAgent:
                     }
                 ],
             })
-            messages.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": tool_call.id,
-                    "content": tool_result,
-                }
-            )
+            messages.append({
+                "role": "tool",
+                "tool_call_id": tool_call.id,
+                "content": tool_result,
+            })
 
             response2 = await self._openai.chat.completions.create(
                 model=self._model,
