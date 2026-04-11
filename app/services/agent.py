@@ -495,18 +495,6 @@ class ConversationalAgent:
             
             # Salvar todos os quizzes pendentes
             await self._save_pending_quiz_batch(phone, all_correct_answers)
-
-            async def _save_pending_quiz_batch(self, phone: str, quizzes: list):
-                """Salva múltiplos quizzes pendentes para comparar com respostas do aluno."""
-                await self._db.table("pending_quizzes").upsert(
-                    {
-                        "phone": phone,
-                        "quizzes": quizzes,
-                        "total": len(quizzes),
-                        "answered": 0,
-                    },
-                    on_conflict="phone"
-                ).execute()
             
             return json.dumps({
                 "sent": True,
@@ -526,6 +514,18 @@ class ConversationalAgent:
 
         # Salvar mensagem do usuário
         await self._save_message(phone, "user", text)
+
+    async def _save_pending_quiz_batch(self, phone: str, quizzes: list):
+        """Salva múltiplos quizzes pendentes para comparar com respostas do aluno."""
+        await self._db.table("pending_quizzes").upsert(
+            {
+                "phone": phone,
+                "quizzes": quizzes,
+                "total": len(quizzes),
+                "answered": 0,
+            },
+            on_conflict="phone"
+        ).execute()
 
         # Carregar histórico
         history = await self._load_history(phone)
