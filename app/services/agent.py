@@ -264,6 +264,40 @@ AGENT_TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "send_quiz_batch",
+            "description": (
+                "Sends MULTIPLE quizzes at once (3-5 polls). Use when the student asks for 'more quizzes', 'send me more', "
+                "'quero mais', 'manda mais', or wants to practice with several questions. "
+                "After sending, say something short like 'Responda todas e te dou feedback!' or 'Answer all and I'll give you feedback!' "
+                "Do NOT repeat the questions or options — they are visible in the polls."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "quizzes": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "question": {"type": "string"},
+                                "options": {"type": "array", "items": {"type": "string"}},
+                                "correct_indices": {"type": "array", "items": {"type": "integer"}},
+                                "selectable_count": {"type": "integer", "default": 1},
+                            },
+                            "required": ["question", "options", "correct_indices"],
+                        },
+                        "minItems": 3,
+                        "maxItems": 5,
+                        "description": "Array of 3-5 quiz objects. Each has question, options, correct_indices, and optional selectable_count.",
+                    },
+                },
+                "required": ["quizzes"],
+            },
+        },
+    },
 ]
 
 
@@ -424,6 +458,60 @@ class ConversationalAgent:
                     logger.error(f"Failed to send poll: {e}")
                     return json.dumps({"sent": False, "error": str(e)})
             return json.dumps({"sent": False, "error": "Uazapi service not available"})
+
+            if tool_name == "send_quiz_batch":
+            quizzes = args.get("quizzes", [])
+            if not self._uazapi:
+                return json.dumps({"sent": False, "error": "Uazapi service not available"})
+            
+            sent_count = 0
+            all_correct_answers = []
+            
+            for quiz in quizzes:
+                question = quiz["question"]
+                options = quiz["options"]
+                correct_indices = quiz.get("correct_indices", [0])
+                selectable_count = quiz.get("selectable_count", 1)
+                
+                if isinstance(correct_indices, int):
+                    correct_indices = [correct_indices]
+                
+                try:
+                    await self._uazapi.send_poll(
+                        phone=phone,
+                        question=question,
+                        options=options,
+                        selectable_count=selectable_count,
+                    )
+                    sent_count += 1
+                    correct_answers = [options[i] for i in correct_indices if i < len(options)]
+                    all_correct_answers.append({
+                        "question": question,
+                        "correct_answers": correct_answers,
+                    })
+                except Exception as e:
+                    logger.error(f"Failed to send poll in batch: {e}")
+            
+            # Salvar todos os quizzes pendentes
+            await self._save_pending_quiz_batch(phone, all_correct_answers)
+
+            async def _save_pending_quiz_batch(self, phone: str, quizzes: list):
+                """Salva múltiplos quizzes pendentes para comparar com respostas do aluno."""
+                await self._db.table("pending_quizzes").upsert(
+                    {
+                        "phone": phone,
+                        "quizzes": quizzes,
+                        "total": len(quizzes),
+                        "answered": 0,
+                    },
+                    on_conflict="phone"
+                ).execute()
+            
+            return json.dumps({
+                "sent": True,
+                "count": sent_count,
+                "total": len(quizzes),
+            })
 
         return json.dumps({"error": f"Unknown tool: {tool_name}"})
 
