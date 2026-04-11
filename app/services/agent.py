@@ -481,7 +481,21 @@ class ConversationalAgent:
             })
 
             # Segunda chamada ao GPT com resultado da tool
-            messages.append(assistant_msg.model_dump())
+            # Incluir apenas o tool_call que estamos respondendo (evita erro se GPT retornar múltiplos)
+            messages.append({
+                "role": "assistant",
+                "content": assistant_msg.content or "",
+                "tool_calls": [
+                    {
+                        "id": tool_call.id,
+                        "type": "function",
+                        "function": {
+                            "name": tool_call.function.name,
+                            "arguments": tool_call.function.arguments,
+                        },
+                    }
+                ],
+            })
             messages.append(
                 {
                     "role": "tool",
