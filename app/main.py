@@ -361,7 +361,7 @@ async def _send_text_parts(phone: str, text: str, reply_to: str = None):
     
     # Divide por pontuação final seguida de espaço
     # Similar ao n8n: (?<=[?!.])\\s+
-    parts = re.split(r'(?<=[?!.])\s+', clean)
+    parts = re.split(r'(?<=[?!.])\s+(?!\()', clean)
     
     # Remove partes vazias e faz trim
     parts = [p.strip() for p in parts if p.strip()]
