@@ -92,7 +92,7 @@ QUIZ TYPES YOU CAN CREATE:
 
 HOW TO USE QUIZZES:
 - CRITICAL: After calling send_quiz, your text response must NOT repeat the question or options. The poll widget already shows them. Just say something short.
-- When the student asks for "more quizzes", "manda mais", "quero mais", or similar: use send_quiz_batch to send 3-5 quizzes at once. After sending, just say "Responda todas e te dou feedback!" — nothing else.
+- CRITICAL: After calling send_quiz_batch, your text response must be SHORT (1 line max). Say ONLY something like "Responda todas e te dou feedback!" or "Bora lá, responde aí!" — NEVER list the questions, NEVER number them (1., 2., 3.), NEVER repeat the options, NEVER ask "which one is correct?". The polls already show everything.
 - Always set up the quiz conversationally: "Ooh wait, let me quiz you on this!" or "Quick challenge!"
 - After the student answers (you'll receive poll results), react naturally: celebrate if correct, explain briefly if wrong, then CONTINUE THE CONVERSATION.
 - Make it fun, not a test. The vibe is "game between friends", not "classroom exam".
@@ -240,7 +240,7 @@ AGENT_TOOLS = [
                 "Use to gamify learning: vocabulary, grammar, complete-the-sentence, pronunciation awareness, idioms. "
                 "Use naturally every 5-8 messages or when the student seems disengaged, asks to play, or after a correction opportunity. "
                 "Keep it fun and conversational — not like a classroom test. "
-                "IMPORTANT: After sending, do NOT repeat the question or options in your text response - they are already visible in the poll widget."
+                "CRITICAL: Your text response after this tool MUST NOT repeat the question or options — just say 'Bora!' or 'Responde aí!' (1 line max)."
             ),
             "parameters": {
                 "type": "object",
@@ -272,8 +272,8 @@ AGENT_TOOLS = [
             "description": (
                 "Sends MULTIPLE quizzes at once (3-5 polls). Use when the student asks for 'more quizzes', 'send me more', "
                 "'quero mais', 'manda mais', or wants to practice with several questions. "
-                "After sending, say something short like 'Responda todas e te dou feedback!' or 'Answer all and I'll give you feedback!' "
-                "Do NOT repeat the questions or options — they are visible in the polls."
+                "CRITICAL: Your text response after this tool MUST be 1 line only, like 'Responda todas!' or 'Bora lá!'. "
+                "NEVER list questions (1., 2., 3.), NEVER repeat options, NEVER write what the polls contain. The student sees the polls directly."
             ),
             "parameters": {
                 "type": "object",
