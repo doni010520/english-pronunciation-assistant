@@ -310,7 +310,7 @@ AGENT_TOOLS = [
                             },
                             "required": ["question", "options", "correct_indices"],
                         },
-                        "minItems": 3,
+                        "minItems": 5,
                         "maxItems": 5,
                         "description": "Array of 3-5 quiz objects. Each has question, options, correct_indices, and optional selectable_count.",
                     },
