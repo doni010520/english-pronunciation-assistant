@@ -434,6 +434,8 @@ async def webhook_uazapi(request: Request):
         push_name = message.get("senderName", "Aluno")
         msg_type = message.get("messageType", "")
 
+        logger.info(f"PAYLOAD COMPLETO: {json.dumps(data, indent=2, default=str)}")
+
         logger.info(f"{phone} ({push_name}) tipo: {msg_type}")
 
         # Salvar push_name
