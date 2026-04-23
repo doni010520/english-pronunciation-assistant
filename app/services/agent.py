@@ -477,18 +477,34 @@ class ConversationalAgent:
             question = args["question"]
             options = args["options"]
             correct_idx = args.get("correct_index", 0)
+            correct_answer = options[correct_idx] if correct_idx < len(options) else options[0]
+            
             if self._uazapi:
                 try:
-                    await self._uazapi.send_poll(
+                    result = await self._uazapi.send_poll(
                         phone=phone,
                         question=question,
                         options=options,
                         selectable_count=1,
                     )
+                    
+                    # Extrair message_id da resposta do Uazapi
+                    quiz_message_id = result.get("id", "") or result.get("messageId", "") or result.get("key", {}).get("id", "")
+                    
+                    # Salvar enquete pendente para rastrear resposta
+                    await self._save_pending_single_quiz(
+                        phone=phone,
+                        quiz_message_id=quiz_message_id,
+                        question=question,
+                        options=options,
+                        correct_answer=correct_answer,
+                    )
+                    
                     return json.dumps({
                         "sent": True,
                         "question": question,
-                        "correct_answer": options[correct_idx] if correct_idx < len(options) else options[0],
+                        "correct_answer": correct_answer,
+                        "quiz_message_id": quiz_message_id,
                     })
                 except Exception as e:
                     logger.error(f"Failed to send poll: {e}")
@@ -582,6 +598,200 @@ class ConversationalAgent:
             tool_args = json.loads(tool_call.function.arguments)
 
             logger.info(f"Tool call: {tool_name}({tool_args})")
+
+    async def _save_pending_single_quiz(
+        self, 
+        phone: str, 
+        quiz_message_id: str,
+        question: str,
+        options: list,
+        correct_answer: str
+    ):
+        """Salva uma enquete única pendente para rastrear resposta e tentativas."""
+        await self._db.table("pending_quizzes").upsert(
+            {
+                "phone": phone,
+                "quiz_message_id": quiz_message_id,
+                "question": question,
+                "options": options,
+                "correct_answers": [correct_answer],
+                "quizzes": None,
+                "total": 1,
+                "answered": 0,
+                "attempts": 0,
+                "max_attempts": 2,
+                "awaiting_hint_response": False,
+                "status": "pending",
+                "quiz_type": "single",
+                "followup_sent": False,
+            },
+            on_conflict="phone"
+        ).execute()
+
+    async def process_quiz_answer(self, phone: str, vote: str, quiz_message_id: str, push_name: str = "Aluno") -> str:
+        """Processa a resposta de uma enquete e retorna feedback apropriado."""
+        
+        # Buscar enquete pendente
+        result = await self._db.table("pending_quizzes").select("*").eq("phone", phone).execute()
+        
+        if not result.data:
+            return None  # Nenhuma enquete pendente
+        
+        quiz_data = result.data[0]
+        
+        # Verificar se é single quiz
+        if quiz_data.get("quiz_type") != "single":
+            return None  # Batch será tratado separadamente
+        
+        correct_answer = quiz_data.get("correct_answers", [""])[0]
+        question = quiz_data.get("question", "")
+        attempts = quiz_data.get("attempts", 0)
+        awaiting_hint = quiz_data.get("awaiting_hint_response", False)
+        
+        # Se estava aguardando resposta sobre dica
+        if awaiting_hint:
+            return await self._handle_hint_response(phone, vote, quiz_data, push_name)
+        
+        # Verificar se acertou
+        is_correct = vote.strip().lower() == correct_answer.strip().lower()
+        
+        if is_correct:
+            # Acertou! Marcar como respondido e gerar feedback
+            await self._db.table("pending_quizzes").update({
+                "status": "answered_correct",
+                "answered": 1,
+                "answered_at": "now()",
+            }).eq("phone", phone).execute()
+            
+            return await self._generate_correct_feedback(question, correct_answer, push_name)
+        
+        else:
+            # Errou
+            new_attempts = attempts + 1
+            
+            if new_attempts >= 2:
+                # Segunda tentativa errada - revelar resposta
+                await self._db.table("pending_quizzes").update({
+                    "status": "answered_wrong",
+                    "answered": 1,
+                    "attempts": new_attempts,
+                    "answered_at": "now()",
+                }).eq("phone", phone).execute()
+                
+                return await self._generate_wrong_feedback_final(question, correct_answer, vote, push_name)
+            
+            else:
+                # Primeira tentativa errada - oferecer dica
+                await self._db.table("pending_quizzes").update({
+                    "attempts": new_attempts,
+                    "awaiting_hint_response": True,
+                }).eq("phone", phone).execute()
+                
+                return await self._generate_wrong_feedback_offer_hint(question, vote, push_name)
+
+    async def _handle_hint_response(self, phone: str, response: str, quiz_data: dict, push_name: str) -> str:
+        """Trata a resposta do aluno sobre querer ou não uma dica."""
+        
+        # Reset do estado de aguardando dica
+        await self._db.table("pending_quizzes").update({
+            "awaiting_hint_response": False,
+        }).eq("phone", phone).execute()
+        
+        question = quiz_data.get("question", "")
+        correct_answer = quiz_data.get("correct_answers", [""])[0]
+        options = quiz_data.get("options", [])
+        
+        # Verificar se o aluno quer dica (sim, quero, yes, etc.)
+        positive_responses = ["sim", "quero", "yes", "s", "ok", "pode", "manda", "vai", "bora", "please", "por favor"]
+        wants_hint = any(p in response.lower() for p in positive_responses)
+        
+        if wants_hint:
+            return await self._generate_hint(question, correct_answer, options, push_name)
+        else:
+            # Não quer dica, dar mais uma chance
+            return f"Beleza, {push_name}! Tenta de novo então! 💪"
+
+    async def _generate_correct_feedback(self, question: str, correct_answer: str, push_name: str) -> str:
+        """Gera feedback para resposta correta usando GPT."""
+        settings = await self._get_settings()
+        
+        prompt = f"""O aluno {push_name} acertou uma enquete de inglês.
+
+Pergunta: {question}
+Resposta correta: {correct_answer}
+
+Gere uma mensagem curta (máximo 3 linhas) que:
+1. Parabenize o aluno de forma natural e entusiasmada
+2. Explique brevemente POR QUE essa é a resposta certa (seja educativo mas conciso)
+3. Use tom de WhatsApp, informal e amigável
+
+Responda apenas com a mensagem, sem explicações adicionais."""
+
+        response = await self._openai.chat.completions.create(
+            model=self._model,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=150,
+            temperature=0.7,
+        )
+        
+        return response.choices[0].message.content.strip()
+
+    async def _generate_wrong_feedback_offer_hint(self, question: str, wrong_answer: str, push_name: str) -> str:
+        """Gera feedback para primeira tentativa errada, oferecendo dica."""
+        return f"Quase, {push_name}! 🤔 '{wrong_answer}' não é a resposta certa. Quer uma dica?"
+
+    async def _generate_wrong_feedback_final(self, question: str, correct_answer: str, wrong_answer: str, push_name: str) -> str:
+        """Gera feedback para segunda tentativa errada, revelando resposta."""
+        settings = await self._get_settings()
+        
+        prompt = f"""O aluno {push_name} errou uma enquete de inglês pela segunda vez.
+
+Pergunta: {question}
+Resposta do aluno: {wrong_answer}
+Resposta correta: {correct_answer}
+
+Gere uma mensagem curta (máximo 4 linhas) que:
+1. Seja encorajadora (não desanime o aluno)
+2. Revele a resposta correta
+3. Explique brevemente POR QUE essa é a resposta certa
+4. Use tom de WhatsApp, informal e amigável
+
+Responda apenas com a mensagem, sem explicações adicionais."""
+
+        response = await self._openai.chat.completions.create(
+            model=self._model,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=150,
+            temperature=0.7,
+        )
+        
+        return response.choices[0].message.content.strip()
+
+    async def _generate_hint(self, question: str, correct_answer: str, options: list, push_name: str) -> str:
+        """Gera uma dica pedagógica sem revelar a resposta."""
+        
+        prompt = f"""O aluno {push_name} errou uma enquete de inglês e pediu uma dica.
+
+Pergunta: {question}
+Opções: {', '.join(options)}
+Resposta correta: {correct_answer} (NÃO REVELE!)
+
+Gere uma DICA curta (máximo 2 linhas) que:
+1. Ajude o aluno a pensar na direção certa
+2. NÃO revele a resposta diretamente
+3. Pode dar uma pista gramatical, contextual ou de significado
+4. Termine encorajando a tentar de novo
+
+Responda apenas com a dica, sem explicações adicionais."""
+
+        response = await self._openai.chat.completions.create(
+            model=self._model,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=100,
+            temperature=0.7,
+        )
+        
+        return response.choices[0].message.content.strip()
 
             # Executar tool
             tool_result = await self._execute_tool(phone, tool_name, tool_args)
