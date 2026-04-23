@@ -493,6 +493,30 @@ async def webhook_uazapi(request: Request):
                 logger.error(f"Falha ao baixar imagem: {e}")
                 return JSONResponse({"status": "error", "message": str(e)})
 
+        # PollUpdateMessage → resposta de enquete
+        if msg_type == "PollUpdateMessage":
+            vote = message.get("vote", "")
+            quoted_id = message.get("quoted", "")  # ID da enquete original
+            
+            if vote and agent:
+                try:
+                    feedback = await agent.process_quiz_answer(
+                        phone=phone,
+                        vote=vote,
+                        quiz_message_id=quoted_id,
+                        push_name=push_name,
+                    )
+                    
+                    if feedback:
+                        await uazapi_service.send_text(phone, feedback)
+                        logger.info(f"Quiz feedback enviado para {phone}")
+                        return JSONResponse({"status": "ok", "type": "poll_answer"})
+                    
+                except Exception as e:
+                    logger.error(f"Erro ao processar resposta de enquete: {e}", exc_info=True)
+            
+            return JSONResponse({"status": "ok", "type": "poll_update"})
+
         logger.info(f"Tipo não suportado: {msg_type}")
         return JSONResponse({"status": "ignored", "reason": f"unsupported: {msg_type}"})
 
