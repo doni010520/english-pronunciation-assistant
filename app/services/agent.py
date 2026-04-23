@@ -556,48 +556,8 @@ class ConversationalAgent:
         return json.dumps({"error": f"Unknown tool: {tool_name}"})
 
     # --------------------------------------------------
-    # Processar mensagem de texto
+    # Quiz answer processing (single quiz)
     # --------------------------------------------------
-
-    async def process_message(self, phone: str, text: str, push_name: str = "Aluno") -> str:
-        """Processa uma mensagem de texto e retorna a resposta do agente."""
-        settings = await self._get_settings()
-
-        # Salvar mensagem do usuário
-        await self._save_message(phone, "user", text)
-
-        # Carregar histórico
-        history = await self._load_history(phone)
-
-        # Buscar contexto RAG
-        rag_context = await self._rag.get_relevant_context(text)
-
-        # Montar system prompt
-        system_prompt = self._build_system_prompt(settings, push_name, rag_context)
-
-        # Montar mensagens para o GPT
-        messages = [{"role": "system", "content": system_prompt}]
-        messages.extend(history)
-
-        # Primeira chamada ao GPT
-        response = await self._openai.chat.completions.create(
-            model=self._model,
-            messages=messages,
-            tools=AGENT_TOOLS,
-            tool_choice="auto",
-            max_tokens=300,
-            temperature=0.7,
-        )
-
-        assistant_msg = response.choices[0].message
-
-        # Verificar se há tool calls
-        if assistant_msg.tool_calls:
-            tool_call = assistant_msg.tool_calls[0]
-            tool_name = tool_call.function.name
-            tool_args = json.loads(tool_call.function.arguments)
-
-            logger.info(f"Tool call: {tool_name}({tool_args})")
 
     async def _save_pending_single_quiz(
         self, 
@@ -713,7 +673,6 @@ class ConversationalAgent:
 
     async def _generate_correct_feedback(self, question: str, correct_answer: str, push_name: str) -> str:
         """Gera feedback para resposta correta usando GPT."""
-        settings = await self._get_settings()
         
         prompt = f"""O aluno {push_name} acertou uma enquete de inglês.
 
@@ -742,7 +701,6 @@ Responda apenas com a mensagem, sem explicações adicionais."""
 
     async def _generate_wrong_feedback_final(self, question: str, correct_answer: str, wrong_answer: str, push_name: str) -> str:
         """Gera feedback para segunda tentativa errada, revelando resposta."""
-        settings = await self._get_settings()
         
         prompt = f"""O aluno {push_name} errou uma enquete de inglês pela segunda vez.
 
@@ -793,6 +751,50 @@ Responda apenas com a dica, sem explicações adicionais."""
         
         return response.choices[0].message.content.strip()
 
+    # --------------------------------------------------
+    # Processar mensagem de texto
+    # --------------------------------------------------
+
+    async def process_message(self, phone: str, text: str, push_name: str = "Aluno") -> str:
+        """Processa uma mensagem de texto e retorna a resposta do agente."""
+        settings = await self._get_settings()
+
+        # Salvar mensagem do usuário
+        await self._save_message(phone, "user", text)
+
+        # Carregar histórico
+        history = await self._load_history(phone)
+
+        # Buscar contexto RAG
+        rag_context = await self._rag.get_relevant_context(text)
+
+        # Montar system prompt
+        system_prompt = self._build_system_prompt(settings, push_name, rag_context)
+
+        # Montar mensagens para o GPT
+        messages = [{"role": "system", "content": system_prompt}]
+        messages.extend(history)
+
+        # Primeira chamada ao GPT
+        response = await self._openai.chat.completions.create(
+            model=self._model,
+            messages=messages,
+            tools=AGENT_TOOLS,
+            tool_choice="auto",
+            max_tokens=300,
+            temperature=0.7,
+        )
+
+        assistant_msg = response.choices[0].message
+
+        # Verificar se há tool calls
+        if assistant_msg.tool_calls:
+            tool_call = assistant_msg.tool_calls[0]
+            tool_name = tool_call.function.name
+            tool_args = json.loads(tool_call.function.arguments)
+
+            logger.info(f"Tool call: {tool_name}({tool_args})")
+
             # Executar tool
             tool_result = await self._execute_tool(phone, tool_name, tool_args)
 
@@ -818,15 +820,18 @@ Responda apenas com a dica, sem explicações adicionais."""
                 "content": tool_result,
             })
 
-            response2 = await self._openai.chat.completions.create(
+            second_response = await self._openai.chat.completions.create(
                 model=self._model,
                 messages=messages,
                 max_tokens=300,
                 temperature=0.7,
             )
-            reply = response2.choices[0].message.content.strip()
+
+            reply = second_response.choices[0].message.content.strip()
+
         else:
-            reply = assistant_msg.content.strip()
+            # Sem tool call — resposta direta
+            reply = assistant_msg.content.strip() if assistant_msg.content else "..."
 
         # Salvar resposta do agente
         await self._save_message(phone, "assistant", reply)
