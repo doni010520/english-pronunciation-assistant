@@ -343,9 +343,10 @@ class ConversationalAgent:
         self._settings_cached_at = 0
         self._settings_ttl = 60  # seconds
 
-    def _first_name(self, self._first_name(push_name): str) -> str:
+    def _first_name(self, push_name: str) -> str:
         """Extrai apenas o primeiro nome."""
-        return self._first_name(push_name).split()[0] if self._first_name(push_name) else "Aluno"
+        return push_name.split()[0] if push_name else "Aluno"
+
     # --------------------------------------------------
     # Settings (com cache)
     # --------------------------------------------------
@@ -373,7 +374,7 @@ class ConversationalAgent:
     # Build system prompt
     # --------------------------------------------------
 
-    def _build_system_prompt(self, settings: dict, self._first_name(push_name): str, rag_context: str = None) -> str:
+    def _build_system_prompt(self, settings: dict, push_name: str, rag_context: str = None) -> str:
         """Monta o system prompt: usa o prompt do painel admin, ou o default se vazio."""
         agent_name = settings.get("agent_name", "Emma")
         personality = settings.get("personality", "friendly, patient, encouraging")
@@ -393,7 +394,7 @@ class ConversationalAgent:
         if rag_context:
             prompt += f"\n\nRELEVANT KNOWLEDGE:\n{rag_context}"
 
-        # Nome do aluno
+        # Nome do aluno (apenas primeiro nome)
         prompt += f"\n\nStudent name: {self._first_name(push_name)}"
 
         # Regras obrigatórias — SEMPRE adicionadas no final
@@ -591,7 +592,7 @@ class ConversationalAgent:
             on_conflict="phone"
         ).execute()
 
-    async def process_quiz_answer(self, phone: str, vote: str, quiz_message_id: str, self._first_name(push_name): str = "Aluno") -> str:
+    async def process_quiz_answer(self, phone: str, vote: str, quiz_message_id: str, push_name: str = "Aluno") -> str:
         """Processa a resposta de uma enquete e retorna feedback apropriado."""
         
         # Buscar enquete pendente
@@ -613,7 +614,7 @@ class ConversationalAgent:
         
         # Se estava aguardando resposta sobre dica
         if awaiting_hint:
-            return await self._handle_hint_response(phone, vote, quiz_data, self._first_name(push_name))
+            return await self._handle_hint_response(phone, vote, quiz_data, push_name)
         
         # Verificar se acertou
         is_correct = vote.strip().lower() == correct_answer.strip().lower()
@@ -626,7 +627,7 @@ class ConversationalAgent:
                 "answered_at": "now()",
             }).eq("phone", phone).execute()
             
-            return await self._generate_correct_feedback(question, correct_answer, self._first_name(push_name))
+            return await self._generate_correct_feedback(question, correct_answer, push_name)
         
         else:
             # Errou
@@ -641,7 +642,7 @@ class ConversationalAgent:
                     "answered_at": "now()",
                 }).eq("phone", phone).execute()
                 
-                return await self._generate_wrong_feedback_final(question, correct_answer, vote, self._first_name(push_name))
+                return await self._generate_wrong_feedback_final(question, correct_answer, vote, push_name)
             
             else:
                 # Primeira tentativa errada - oferecer dica
@@ -650,9 +651,9 @@ class ConversationalAgent:
                     "awaiting_hint_response": True,
                 }).eq("phone", phone).execute()
                 
-                return await self._generate_wrong_feedback_offer_hint(question, vote, self._first_name(push_name))
+                return await self._generate_wrong_feedback_offer_hint(question, vote, push_name)
 
-    async def _handle_hint_response(self, phone: str, response: str, quiz_data: dict, self._first_name(push_name): str) -> str:
+    async def _handle_hint_response(self, phone: str, response: str, quiz_data: dict, push_name: str) -> str:
         """Trata a resposta do aluno sobre querer ou não uma dica."""
         
         # Reset do estado de aguardando dica
@@ -663,29 +664,32 @@ class ConversationalAgent:
         question = quiz_data.get("question", "")
         correct_answer = quiz_data.get("correct_answers", [""])[0]
         options = quiz_data.get("options", [])
+        first_name = self._first_name(push_name)
         
         # Verificar se o aluno quer dica (sim, quero, yes, etc.)
         positive_responses = ["sim", "quero", "yes", "s", "ok", "pode", "manda", "vai", "bora", "please", "por favor"]
         wants_hint = any(p in response.lower() for p in positive_responses)
         
         if wants_hint:
-            return await self._generate_hint(question, correct_answer, options, self._first_name(push_name))
+            return await self._generate_hint(question, correct_answer, options, push_name)
         else:
             # Não quer dica, dar mais uma chance
-            return f"Beleza, {self._first_name(push_name)}! Tenta de novo então! 💪"
+            return f"Beleza, {first_name}! Tenta de novo então! 💪"
 
-    async def _generate_correct_feedback(self, question: str, correct_answer: str, self._first_name(push_name): str) -> str:
+    async def _generate_correct_feedback(self, question: str, correct_answer: str, push_name: str) -> str:
         """Gera feedback para resposta correta usando GPT."""
+        first_name = self._first_name(push_name)
         
-        prompt = f"""O aluno {self._first_name(push_name)} acertou uma enquete de inglês.
+        prompt = f"""O aluno {first_name} acertou uma enquete de inglês.
 
 Pergunta: {question}
 Resposta correta: {correct_answer}
 
 Gere uma mensagem curta (máximo 3 linhas) que:
-1. Parabenize o aluno de forma natural e entusiasmada
+1. Parabenize o aluno de forma natural (use apenas o primeiro nome)
 2. Explique brevemente POR QUE essa é a resposta certa (seja educativo mas conciso)
 3. Use tom de WhatsApp, informal e amigável
+4. Vá direto ao ponto, sem saudações elaboradas
 
 Responda apenas com a mensagem, sem explicações adicionais."""
 
@@ -698,24 +702,27 @@ Responda apenas com a mensagem, sem explicações adicionais."""
         
         return response.choices[0].message.content.strip()
 
-    async def _generate_wrong_feedback_offer_hint(self, question: str, wrong_answer: str, self._first_name(push_name): str) -> str:
+    async def _generate_wrong_feedback_offer_hint(self, question: str, wrong_answer: str, push_name: str) -> str:
         """Gera feedback para primeira tentativa errada, oferecendo dica."""
-        return f"Quase, {self._first_name(push_name)}! 🤔 '{wrong_answer}' não é a resposta certa. Quer uma dica?"
+        first_name = self._first_name(push_name)
+        return f"Quase, {first_name}! 🤔 '{wrong_answer}' não é a resposta certa. Quer uma dica?"
 
-    async def _generate_wrong_feedback_final(self, question: str, correct_answer: str, wrong_answer: str, self._first_name(push_name): str) -> str:
+    async def _generate_wrong_feedback_final(self, question: str, correct_answer: str, wrong_answer: str, push_name: str) -> str:
         """Gera feedback para segunda tentativa errada, revelando resposta."""
+        first_name = self._first_name(push_name)
         
-        prompt = f"""O aluno {self._first_name(push_name)} errou uma enquete de inglês pela segunda vez.
+        prompt = f"""O aluno {first_name} errou uma enquete de inglês pela segunda vez.
 
 Pergunta: {question}
 Resposta do aluno: {wrong_answer}
 Resposta correta: {correct_answer}
 
 Gere uma mensagem curta (máximo 4 linhas) que:
-1. Seja encorajadora (não desanime o aluno)
+1. Seja encorajadora (não desanime o aluno, use apenas o primeiro nome)
 2. Revele a resposta correta
 3. Explique brevemente POR QUE essa é a resposta certa
 4. Use tom de WhatsApp, informal e amigável
+5. Vá direto ao ponto, sem saudações elaboradas como "Oi Gabriel!"
 
 Responda apenas com a mensagem, sem explicações adicionais."""
 
@@ -728,40 +735,46 @@ Responda apenas com a mensagem, sem explicações adicionais."""
         
         return response.choices[0].message.content.strip()
 
-async def _generate_hint(self, question: str, correct_answer: str, options: list, push_name: str) -> str:
-    """Gera uma dica pedagógica sem revelar a resposta."""
-    first_name = self._first_name(push_name)
-    
-    prompt = f"""O aluno errou uma enquete de inglês e pediu uma dica.
+    async def _generate_hint(self, question: str, correct_answer: str, options: list, push_name: str) -> str:
+        """Gera uma dica pedagógica sem revelar a resposta."""
+        
+        prompt = f"""O aluno errou uma enquete de inglês e pediu uma dica.
 
 Pergunta: {question}
 Opções: {', '.join(options)}
 Resposta correta: {correct_answer} (NÃO REVELE!)
 
 Gere APENAS a dica (máximo 2 linhas):
-- Vá direto ao ponto, sem saudação
+- Vá direto ao ponto, sem saudação, sem "Oi", sem usar o nome do aluno
 - Dê uma pista gramatical, contextual ou de significado
 - NÃO revele a resposta
 - Termine com "Tenta de novo!"
 
 Responda apenas com a dica."""
 
-    response = await self._openai.chat.completions.create(
-        model=self._model,
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=80,
-        temperature=0.7,
-    )
-    
-    return response.choices[0].message.content.strip()
+        response = await self._openai.chat.completions.create(
+            model=self._model,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=80,
+            temperature=0.7,
+        )
+        
+        return response.choices[0].message.content.strip()
 
     # --------------------------------------------------
     # Processar mensagem de texto
     # --------------------------------------------------
 
-    async def process_message(self, phone: str, text: str, self._first_name(push_name): str = "Aluno") -> str:
+    async def process_message(self, phone: str, text: str, push_name: str = "Aluno") -> str:
         """Processa uma mensagem de texto e retorna a resposta do agente."""
         settings = await self._get_settings()
+
+        # Verificar se há quiz aguardando resposta sobre dica
+        pending = await self._db.table("pending_quizzes").select("*").eq("phone", phone).execute()
+        if pending.data and pending.data[0].get("awaiting_hint_response"):
+            # Salvar mensagem do usuário antes de processar
+            await self._save_message(phone, "user", text)
+            return await self._handle_hint_response(phone, text, pending.data[0], push_name)
 
         # Salvar mensagem do usuário
         await self._save_message(phone, "user", text)
@@ -773,7 +786,7 @@ Responda apenas com a dica."""
         rag_context = await self._rag.get_relevant_context(text)
 
         # Montar system prompt
-        system_prompt = self._build_system_prompt(settings, self._first_name(push_name), rag_context)
+        system_prompt = self._build_system_prompt(settings, push_name, rag_context)
 
         # Montar mensagens para o GPT
         messages = [{"role": "system", "content": system_prompt}]
@@ -847,15 +860,10 @@ Responda apenas com a dica."""
     # --------------------------------------------------
 
     async def process_image_result(
-        self, phone: str, extracted_text: str, self._first_name(push_name): str = "Aluno"
+        self, phone: str, extracted_text: str, push_name: str = "Aluno"
     ) -> str:
         """Gera resposta para texto extraído de uma imagem."""
         settings = await self._get_settings()
-
-        # Verificar se há quiz aguardando resposta sobre dica
-        pending = await self._db.table("pending_quizzes").select("*").eq("phone", phone).execute()
-        if pending.data and pending.data[0].get("awaiting_hint_response"):
-            return await self._handle_hint_response(phone, text, pending.data[0], push_name)
 
         image_context = (
             f"The student sent an image containing English text: \"{extracted_text}\"\n"
@@ -868,7 +876,7 @@ Responda apenas com a dica."""
 
         history = await self._load_history(phone)
 
-        system_prompt = self._build_system_prompt(settings, self._first_name(push_name))
+        system_prompt = self._build_system_prompt(settings, push_name)
 
         messages = [{"role": "system", "content": system_prompt}]
         messages.extend(history)
