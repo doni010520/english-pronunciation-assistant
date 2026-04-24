@@ -257,10 +257,10 @@ AGENT_TOOLS = [
             "name": "send_quiz",
             "description": (
                 "Sends an interactive WhatsApp poll/quiz to the student. "
-                "Use to gamify learning: vocabulary, grammar, complete-the-sentence, pronunciation awareness, idioms. "
-                "Use naturally every 5-8 messages or when the student seems disengaged, asks to play, or after a correction opportunity. "
-                "Keep it fun and conversational — not like a classroom test. "
-                "CRITICAL: Your text response after this tool MUST NOT repeat the question or options — just say 'Bora!' or 'Responde aí!' (1 line max)."
+                "CRITICAL: Do NOT write ANY text about the quiz in your message — the poll widget already shows the question and options. "
+                "Your text response must be SHORT (1 line max): 'Bora!', 'Responde aí!', 'Vamos ver!'. "
+                "NEVER repeat the question. NEVER list options. NEVER explain what the quiz is about. "
+                "Use naturally every 5-8 messages when the student seems disengaged or asks to play."
             ),
             "parameters": {
                 "type": "object",
