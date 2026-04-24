@@ -353,6 +353,7 @@ async def _send_voice_parts(phone: str, text: str):
         if clean:
             await uazapi_service.send_presence(phone, "recording")
             await _send_voice_reply(phone, clean)
+            
 async def _send_text_parts(phone: str, text: str, reply_to: str = None):
     """Divide a resposta em partes e envia cada uma como mensagem separada."""
     import re
@@ -360,9 +361,21 @@ async def _send_text_parts(phone: str, text: str, reply_to: str = None):
     # Remove asteriscos (markdown bold)
     clean = text.replace('*', '')
     
-    # Quebra após pontuação + emoji opcional, ou após emoji seguido de espaço e letra maiúscula
-    parts = re.split(r'(?<=[?!.])(\s*[\U0001F300-\U0001F9FF]*)?\s+(?=[A-ZÀ-Ú])', clean)
-    parts = [p.strip() for p in parts if p and p.strip()]
+    # Quebra após: pontuação (. ! ?) seguida de emoji opcional, antes de nova frase
+    # Nova frase = letra maiúscula, aspas, ou apóstrofo seguido de letra
+    parts = re.split(r'(?<=[?!.])(\s*[\U0001F300-\U0001F9FF]+)?\s+(?=[A-ZÀ-Ú\'\"\'])', clean)
+    
+    # Limpar partes vazias e None (grupos de captura)
+    parts = [p.strip() for p in parts if p and p.strip() and not re.match(r'^[\U0001F300-\U0001F9FF\s]+$', p)]
+    
+    # Reagrupar emoji órfão com a parte anterior
+    merged = []
+    for p in parts:
+        if merged and re.match(r'^[\U0001F300-\U0001F9FF]+$', p.strip()):
+            merged[-1] = merged[-1] + ' ' + p
+        else:
+            merged.append(p)
+    parts = merged
         
     # Se não dividiu nada, envia o original
     if not parts:
@@ -373,7 +386,7 @@ async def _send_text_parts(phone: str, text: str, reply_to: str = None):
         await uazapi_service.send_text(phone, parts[0], reply_to=reply_to)
         return
     
-    # Envia cada parte com delay de 3 segundos entre elas
+    # Envia cada parte com delay de 2 segundos entre elas
     for i, part in enumerate(parts):
         # Só o primeiro responde à mensagem original
         rid = reply_to if i == 0 else None
