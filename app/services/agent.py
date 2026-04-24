@@ -837,6 +837,10 @@ Responda apenas com a dica."""
                 "content": tool_result,
             })
 
+            # Limitar resposta após quiz para evitar repetir pergunta ou puxar assunto
+            post_quiz_tools = ["send_quiz", "send_quiz_batch"]
+            max_tokens_response = 20 if tool_name in post_quiz_tools else 300  
+            
             second_response = await self._openai.chat.completions.create(
                 model=self._model,
                 messages=messages,
