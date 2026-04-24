@@ -360,13 +360,10 @@ async def _send_text_parts(phone: str, text: str, reply_to: str = None):
     # Remove asteriscos (markdown bold)
     clean = text.replace('*', '')
     
-    # Divide por pontuação final seguida de espaço
-    # Similar ao n8n: (?<=[?!.])\\s+
-    parts = re.split(r'(?<=[?!.])\s+(?!\()', clean)
-    
-    # Remove partes vazias e faz trim
-    parts = [p.strip() for p in parts if p.strip()]
-    
+    # Quebra após pontuação + emoji opcional, ou após emoji seguido de espaço e letra maiúscula
+    parts = re.split(r'(?<=[?!.])(\s*[\U0001F300-\U0001F9FF]*)?\s+(?=[A-ZÀ-Ú])', clean)
+    parts = [p.strip() for p in parts if p and p.strip()]
+        
     # Se não dividiu nada, envia o original
     if not parts:
         parts = [clean.strip()]
