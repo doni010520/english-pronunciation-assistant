@@ -516,7 +516,7 @@ async def webhook_uazapi(request: Request):
                     )
                     
                     if feedback:
-                        await uazapi_service.send_text(phone, feedback)
+                        await _send_text_parts(phone, feedback)
                         logger.info(f"Quiz feedback enviado para {phone}")
                         return JSONResponse({"status": "ok", "type": "poll_answer"})
                     
