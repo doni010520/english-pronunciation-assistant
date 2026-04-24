@@ -361,42 +361,40 @@ async def _send_text_parts(phone: str, text: str, reply_to: str = None):
     # Remove asteriscos (markdown bold)
     clean = text.replace('*', '')
     
-    # Quebra após: pontuação (. ! ?) seguida de emoji opcional, antes de nova frase
-    # Nova frase = letra maiúscula, aspas, ou apóstrofo seguido de letra
-    parts = re.split(r'(?<=[?!.])(\s*[\U0001F300-\U0001F9FF]+)?\s+(?=[A-ZÀ-Ú\'\"\'])', clean)
+    # Encontrar pontos de quebra: .!? (+ emoji opcional) seguido de espaço e nova frase
+    sentences = []
+    last_end = 0
     
-    # Limpar partes vazias e None (grupos de captura)
-    parts = [p.strip() for p in parts if p and p.strip() and not re.match(r'^[\U0001F300-\U0001F9FF\s]+$', p)]
+    # Padrão: pontuação + emoji opcional, seguido de espaço + letra maiúscula/aspas/número
+    for match in re.finditer(r'[.!?][\s]*[\U0001F300-\U0001F9FF]*(?=\s+[A-ZÀ-Ú"\'\d])', clean):
+        end = match.end()
+        sentences.append(clean[last_end:end].strip())
+        last_end = end
     
-    # Reagrupar emoji órfão com a parte anterior
-    merged = []
-    for p in parts:
-        if merged and re.match(r'^[\U0001F300-\U0001F9FF]+$', p.strip()):
-            merged[-1] = merged[-1] + ' ' + p
-        else:
-            merged.append(p)
-    parts = merged
-        
-    # Se não dividiu nada, envia o original
-    if not parts:
-        parts = [clean.strip()]
+    # Adicionar o resto do texto
+    if last_end < len(clean):
+        remaining = clean[last_end:].strip()
+        if remaining:
+            sentences.append(remaining)
     
-    # Se tem só 1 parte, envia direto sem delay
-    if len(parts) == 1:
-        await uazapi_service.send_text(phone, parts[0], reply_to=reply_to)
+    # Se não encontrou quebras, usar o texto original
+    if not sentences:
+        sentences = [clean.strip()]
+    
+    # Se tem só 1 parte, envia direto
+    if len(sentences) == 1:
+        await uazapi_service.send_text(phone, sentences[0], reply_to=reply_to)
         return
     
-    # Envia cada parte com delay de 2 segundos entre elas
-    for i, part in enumerate(parts):
-        # Só o primeiro responde à mensagem original
+    # Envia cada parte com delay
+    for i, part in enumerate(sentences):
         rid = reply_to if i == 0 else None
         await uazapi_service.send_text(phone, part, reply_to=rid)
         
-        # Delay entre mensagens (não espera após a última)
-        if i < len(parts) - 1:
+        if i < len(sentences) - 1:
             await uazapi_service.send_presence(phone, "composing")
             await asyncio.sleep(2)
-
+            
 async def _transcribe_audio(audio_bytes: bytes, mimetype: str) -> str:
     """Transcreve áudio usando OpenAI Whisper."""
     import io
