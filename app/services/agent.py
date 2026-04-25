@@ -436,9 +436,18 @@ class ConversationalAgent:
         await self._db.table("pending_quizzes").upsert(
             {
                 "phone": phone,
+                "quiz_message_id": None,
+                "question": None,
+                "options": None,
+                "correct_answers": None,
                 "quizzes": quizzes,
                 "total": len(quizzes),
                 "answered": 0,
+                "attempts": 0,
+                "awaiting_hint_response": False,
+                "status": "pending",
+                "quiz_type": "batch",
+                "followup_sent": False,
             },
             on_conflict="phone"
         ).execute()
@@ -521,7 +530,7 @@ class ConversationalAgent:
                 return json.dumps({"sent": False, "error": "Uazapi service not available"})
 
             sent_count = 0
-            all_correct_answers = []
+            batch_quizzes = []
 
             for quiz in quizzes:
                 question = quiz["question"]
@@ -533,23 +542,31 @@ class ConversationalAgent:
                     correct_indices = [correct_indices]
 
                 try:
-                    await self._uazapi.send_poll(
+                    result = await self._uazapi.send_poll(
                         phone=phone,
                         question=question,
                         options=options,
                         selectable_count=selectable_count,
                     )
+                    
+                    # Extrair message_id
+                    quiz_message_id = result.get("id", "") or result.get("messageId", "") or result.get("key", {}).get("id", "")
+                    
                     sent_count += 1
                     correct_answers = [options[i] for i in correct_indices if i < len(options)]
-                    all_correct_answers.append({
+                    batch_quizzes.append({
+                        "id": quiz_message_id,
                         "question": question,
-                        "correct_answers": correct_answers,
+                        "options": options,
+                        "correct": correct_answers[0] if correct_answers else "",
+                        "answer": None,
+                        "status": "pending",
                     })
                 except Exception as e:
                     logger.error(f"Failed to send poll in batch: {e}")
 
-            # Salvar todos os quizzes pendentes
-            await self._save_pending_quiz_batch(phone, all_correct_answers)
+            # Salvar batch de quizzes pendentes
+            await self._save_pending_quiz_batch(phone, batch_quizzes)
 
             return json.dumps({
                 "sent": True,
@@ -603,9 +620,11 @@ class ConversationalAgent:
         
         quiz_data = result.data[0]
         
-        # Verificar se é single quiz
-        if quiz_data.get("quiz_type") != "single":
-            return None  # Batch será tratado separadamente
+        quiz_type = quiz_data.get("quiz_type", "single")
+        
+        # Batch de enquetes
+        if quiz_type == "batch":
+            return await self._process_batch_answer(phone, vote, quiz_message_id, quiz_data, push_name)
         
         correct_answer = quiz_data.get("correct_answers", [""])[0]
         question = quiz_data.get("question", "")
@@ -762,6 +781,79 @@ Responda apenas com a dica."""
         return response.choices[0].message.content.strip()
 
     # --------------------------------------------------
+    # Quiz answer processing (batch)
+    # --------------------------------------------------
+
+    async def _process_batch_answer(self, phone: str, vote: str, quiz_message_id: str, quiz_data: dict, push_name: str) -> str:
+        """Processa resposta de uma enquete do batch."""
+        quizzes = quiz_data.get("quizzes", [])
+        answered = quiz_data.get("answered", 0)
+        total = quiz_data.get("total", 0)
+        
+        # Encontrar qual quiz foi respondido pelo message_id
+        quiz_found = False
+        for quiz in quizzes:
+            if quiz.get("id") == quiz_message_id and quiz.get("status") == "pending":
+                quiz["answer"] = vote
+                quiz["status"] = "correct" if vote.strip().lower() == quiz.get("correct", "").strip().lower() else "wrong"
+                quiz_found = True
+                answered += 1
+                break
+        
+        if not quiz_found:
+            return None  # Quiz não encontrado ou já respondido
+        
+        # Atualizar no banco
+        await self._db.table("pending_quizzes").update({
+            "quizzes": quizzes,
+            "answered": answered,
+            "last_interaction_at": "now()",
+        }).eq("phone", phone).execute()
+        
+        # Se todas respondidas, gerar gabarito
+        if answered >= total:
+            return await self._generate_batch_feedback(quizzes, push_name)
+        
+        # Ainda faltam respostas - não enviar nada
+        return None
+
+    async def _generate_batch_feedback(self, quizzes: list, push_name: str) -> str:
+        """Gera feedback completo do batch de enquetes."""
+        first_name = self._first_name(push_name)
+        
+        correct_count = sum(1 for q in quizzes if q.get("status") == "correct")
+        total = len(quizzes)
+        
+        prompt = f"""O aluno {first_name} respondeu {total} enquetes de inglês e acertou {correct_count}.
+
+Resultado:
+"""
+        for q in quizzes:
+            status = "✓" if q.get("status") == "correct" else "✗"
+            prompt += f"- {q.get('question')}: {q.get('answer')} {status} (certa: {q.get('correct')})\n"
+
+        prompt += f"""
+
+Gere uma mensagem de feedback (máximo 6 linhas) que:
+1. Diga o resultado: "{correct_count}/{total}"
+2. Se acertou todas: parabenize com entusiasmo
+3. Se errou alguma: explique brevemente CADA erro (por que a resposta certa é certa)
+4. Termine com encorajamento
+5. Tom de WhatsApp, informal e amigável
+6. Vá direto ao ponto, sem saudações elaboradas
+
+Responda apenas com a mensagem."""
+
+        response = await self._openai.chat.completions.create(
+            model=self._model,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=300,
+            temperature=0.7,
+        )
+        
+        return response.choices[0].message.content.strip()
+
+    # --------------------------------------------------
     # Processar mensagem de texto
     # --------------------------------------------------
 
@@ -844,7 +936,7 @@ Responda apenas com a dica."""
             second_response = await self._openai.chat.completions.create(
                 model=self._model,
                 messages=messages,
-                max_tokens=300,
+                max_tokens=max_tokens_response,
                 temperature=0.7,
             )
 
