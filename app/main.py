@@ -81,7 +81,7 @@ async def lifespan(app: FastAPI):
 
     # Novos serviços
     rag_service = RAGService(supabase_client, openai_client)
-    agent = ConversationalAgent(supabase_client, openai_client, rag_service, sm.session_manager, uazapi_service)
+    agent = ConversationalAgent(supabase_client, openai_client, rag_service, sm.session_manager, uazapi_service, feedback_generator)
 
     # SDR Agent (separate WhatsApp number for sales)
     if settings.uazapi_sdr_base_url and settings.uazapi_sdr_token:
