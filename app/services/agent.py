@@ -892,7 +892,7 @@ Responda apenas com a mensagem."""
         
         # Enviar texto
         if self._uazapi:
-            await self._uazapi.send_text(phone, feedback_text)]
+            await self._uazapi.send_text(phone, feedback_text)
         
     # --------------------------------------------------
     # Processar mensagem de texto
