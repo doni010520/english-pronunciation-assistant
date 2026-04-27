@@ -790,15 +790,18 @@ Responda apenas com a dica."""
         answered = quiz_data.get("answered", 0)
         total = quiz_data.get("total", 0)
         
-        # Encontrar qual quiz foi respondido pelo message_id
+        # Encontrar qual quiz foi respondido pela resposta (vote) nas opções
         quiz_found = False
         for quiz in quizzes:
-            if quiz.get("id") == quiz_message_id and quiz.get("status") == "pending":
-                quiz["answer"] = vote
-                quiz["status"] = "correct" if vote.strip().lower() == quiz.get("correct", "").strip().lower() else "wrong"
-                quiz_found = True
-                answered += 1
-                break
+            if quiz.get("status") == "pending":
+                # Verificar se a resposta está nas opções deste quiz
+                options_lower = [opt.lower().strip() for opt in quiz.get("options", [])]
+                if vote.lower().strip() in options_lower:
+                    quiz["answer"] = vote
+                    quiz["status"] = "correct" if vote.strip().lower() == quiz.get("correct", "").strip().lower() else "wrong"
+                    quiz_found = True
+                    answered += 1
+                    break
         
         if not quiz_found:
             return None  # Quiz não encontrado ou já respondido
