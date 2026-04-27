@@ -332,12 +332,14 @@ class ConversationalAgent:
         rag_service: RAGService,
         session_manager,
         uazapi_service=None,
+        feedback_generator=None,  
     ):
         self._db = supabase_client
         self._openai = openai_client
         self._rag = rag_service
         self._session_manager = session_manager
         self._uazapi = uazapi_service
+        self._feedback_generator = feedback_generator
         self._model = "gpt-4.1-mini"
         self._settings_cache = None
         self._settings_cached_at = 0
@@ -812,10 +814,11 @@ Responda apenas com a dica."""
             "answered": answered,
             "last_interaction_at": "now()",
         }).eq("phone", phone).execute()
-        
-        # Se todas respondidas, gerar gabarito
+
+        # Se todas respondidas, gerar gabarito com áudio
         if answered >= total:
-            return await self._generate_batch_feedback(quizzes, push_name)
+            await self._send_batch_feedback_with_audio(phone, quizzes, push_name)
+            return None  # Já enviou direto
         
         # Ainda faltam respostas - não enviar nada
         return None
@@ -856,6 +859,41 @@ Responda apenas com a mensagem."""
         
         return response.choices[0].message.content.strip()
 
+
+    async def _send_batch_feedback_with_audio(self, phone: str, quizzes: list, push_name: str):
+        """Gera e envia feedback do batch com áudio + texto."""
+        import base64
+        import re
+        
+        # Gerar texto do feedback
+        feedback_text = await self._generate_batch_feedback(quizzes, push_name)
+        
+        # Limpar texto para TTS
+        clean_text = re.sub(r'[*_~`#]', '', feedback_text)
+        clean_text = re.sub(r'[\U0001f600-\U0001f9ff]', '', clean_text).strip()
+        
+        # Gerar áudio
+        audio_base64 = None
+        if self._feedback_generator and clean_text:
+            try:
+                tts_bytes = await self._feedback_generator.text_to_speech(clean_text)
+                audio_base64 = base64.b64encode(tts_bytes).decode("ascii")
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning(f"TTS falhou no batch feedback: {e}")
+        
+        # Enviar áudio primeiro (se gerou)
+        if audio_base64 and self._uazapi:
+            try:
+                await self._uazapi.send_voice(phone, audio_base64)
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning(f"Envio de áudio falhou: {e}")
+        
+        # Enviar texto
+        if self._uazapi:
+            await self._uazapi.send_text(phone, feedback_text)]
+        
     # --------------------------------------------------
     # Processar mensagem de texto
     # --------------------------------------------------
